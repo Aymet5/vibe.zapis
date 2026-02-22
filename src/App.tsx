@@ -86,6 +86,21 @@ export default function App() {
     document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleMasterClick = (masterId: string) => {
+    setMaster(masterId);
+    const masterData = MASTERS.find(m => m.id === masterId);
+    if (masterData && !masterData.categories.includes(category)) {
+      setCategory(masterData.categories[0]);
+    }
+    scrollToBooking();
+  };
+
+  const handleServiceClick = (serviceName: string, categoryId: string) => {
+    setCategory(categoryId);
+    setService(serviceName);
+    scrollToBooking();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -148,12 +163,18 @@ export default function App() {
           <div className="text-2xl font-black tracking-tighter text-orange-500">
             ВАЙБ.
           </div>
-          <button 
-            onClick={scrollToBooking}
-            className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-medium transition-colors"
-          >
-            Записаться
-          </button>
+          <div className="flex items-center gap-6">
+            <a href="tel:+79991792895" className="hidden sm:flex items-center gap-2 text-white/80 hover:text-white transition-colors font-medium">
+              <Phone className="w-4 h-4 text-orange-500" />
+              <span>+7 (999) 179-28-95</span>
+            </a>
+            <button 
+              onClick={scrollToBooking}
+              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-medium transition-colors"
+            >
+              Записаться
+            </button>
+          </div>
         </div>
       </header>
 
@@ -179,11 +200,11 @@ export default function App() {
               transition={{ duration: 0.7, delay: 0.1 }}
               className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.9] uppercase"
             >
-              Создаем <br />
+              Точная стрижка. <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-500">
-                вайб
+                Уверенный
               </span>
-              <br />в каждой стрижке
+              <br />вайб.
             </motion.h1>
             
             <motion.p 
@@ -192,14 +213,14 @@ export default function App() {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="mt-8 text-lg sm:text-xl text-white/60 max-w-2xl mx-auto font-medium"
             >
-              Место, где стиль встречается с атмосферой. Профессиональные мастера, премиальный сервис и идеальный результат.
+              Качественная работа, внимание к деталям и атмосфера, в которую хочется возвращаться.
             </motion.p>
             
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.4 }}
-              className="mt-12"
+              className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-6"
             >
               <button 
                 onClick={scrollToBooking}
@@ -207,6 +228,15 @@ export default function App() {
               >
                 Записаться онлайн
               </button>
+              <div className="flex items-center gap-4 text-white/80 hover:text-white transition-colors">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                  <Phone className="w-5 h-5 text-orange-500" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm text-white/50">Или по телефону</div>
+                  <a href="tel:+79991792895" className="text-lg font-bold tracking-wide">+7 (999) 179-28-95</a>
+                </div>
+              </div>
             </motion.div>
           </div>
         </section>
@@ -223,11 +253,12 @@ export default function App() {
               {MASTERS.map((master, idx) => (
                 <motion.div
                   key={master.id}
+                  onClick={() => handleMasterClick(master.id)}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className="group relative rounded-3xl p-8 bg-white/5 border border-white/10 hover:border-orange-500/50 transition-all duration-500 hover:bg-white/10 overflow-hidden"
+                  className="group relative rounded-3xl p-8 bg-white/5 border border-white/10 hover:border-orange-500/50 transition-all duration-500 hover:bg-white/10 overflow-hidden cursor-pointer"
                 >
                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-orange-500/10 rounded-full blur-[40px] group-hover:bg-orange-500/30 transition-colors duration-500" />
                   
@@ -294,7 +325,11 @@ export default function App() {
                   className="space-y-2"
                 >
                   {SERVICES[activeTab as keyof typeof SERVICES].map((service, idx) => (
-                    <div key={idx} className="flex items-center justify-between group p-3 hover:bg-white/5 rounded-2xl transition-colors">
+                    <div 
+                      key={idx} 
+                      onClick={() => handleServiceClick(service.name, activeTab)}
+                      className="flex items-center justify-between group p-3 hover:bg-white/5 rounded-2xl transition-colors cursor-pointer"
+                    >
                       <div className="flex items-center gap-4 flex-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 group-hover:bg-orange-500 group-hover:scale-150 transition-all" />
                         <span className="text-lg font-medium text-white/80 group-hover:text-white transition-colors">{service.name}</span>
@@ -480,6 +515,10 @@ export default function App() {
             </div>
             
             <div className="flex flex-col gap-4 md:items-center">
+              <div className="flex items-center gap-3 text-white/80">
+                <Phone className="w-5 h-5 text-orange-500" />
+                <a href="tel:+79991792895" className="hover:text-white transition-colors">+7 (999) 179-28-95</a>
+              </div>
               <div className="flex items-center gap-3 text-white/80">
                 <MapPin className="w-5 h-5 text-orange-500" />
                 <span>ТД '5 Звёзд' 1 этаж, г. Кызыл</span>
