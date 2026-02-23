@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+6import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Scissors, Calendar, Clock, User, Phone, CheckCircle2, MapPin } from 'lucide-react';
 
@@ -13,9 +13,9 @@ const MASTERS = [
 const SERVICES = {
   mens: [
     { name: 'Модельная', price: '600р' },
-    { name: 'Спортивная', price: '400р' },
-    { name: 'Фейд', price: '800р' },
-    { name: 'Кроп', price: '800р' },
+    { name: 'Спортивная', price: '500р' },
+    { name: 'Фейд', price: '600р' },
+    { name: 'Кроп', price: '600р' },
     { name: 'Борода', price: '400р' },
     { name: 'Камуфляж', price: '600р' },
     { name: 'Детская', price: '500р' },
