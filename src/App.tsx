@@ -7,7 +7,7 @@ const MASTERS = [
   { id: 'kezhik', name: 'Кежик', role: 'Барбер', categories: ['mens'] },
   { id: 'aydemir', name: 'Айдемир', role: 'Барбер', categories: ['mens'] },
   { id: 'mengi', name: 'Менги', role: 'Барбер', categories: ['mens'] },
-  { id: 'sulde', name: 'Сулде', role: 'Барбер', categories: ['mens'] },
+  { id: 'sulde', name: 'Таймира', role: 'Мастер Универсал', categories: ['mens'] },
 ];
 
 const SERVICES = {
