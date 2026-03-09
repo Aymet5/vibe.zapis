@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Scissors, Calendar, Clock, User, Phone, CheckCircle2, MapPin } from 'lucide-react';
+import { Scissors, Calendar, Clock, User, Phone, CheckCircle2, MapPin, Sun, Moon } from 'lucide-react';
 
 const MASTERS = [
   { id: 'aydis', name: 'Айдыс', role: 'Топ-мастер', categories: ['mens', 'womens', 'coloring'] },
@@ -51,6 +51,7 @@ const CHAT_IDS = ['5446101221', '-1003875610354'];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('mens');
+  const [isDark, setIsDark] = useState(true);
   
   // Form State
   const [category, setCategory] = useState('mens');
@@ -68,6 +69,14 @@ export default function App() {
     setService('');
     setMaster('');
   }, [category]);
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
@@ -155,22 +164,29 @@ export default function App() {
   const availableServices = SERVICES[category as keyof typeof SERVICES];
 
   return (
-    <div className="min-h-screen font-sans bg-[#0a0a0b] text-white selection:bg-orange-500/30">
+    <div className="min-h-screen font-sans bg-bg-main text-text-main selection:bg-orange-500/30 transition-colors duration-300">
       
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#0a0a0b]/60 backdrop-blur-xl">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-glass backdrop-blur-xl transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="text-2xl font-black tracking-tighter text-orange-500">
             ВАЙБ.
           </div>
-          <div className="flex items-center gap-6">
-            <a href="tel:+79991792895" className="hidden sm:flex items-center gap-2 text-white/80 hover:text-white transition-colors font-medium">
+          <div className="flex items-center gap-4 sm:gap-6">
+            <a href="tel:+79991792895" className="hidden sm:flex items-center gap-2 text-text-subtle hover:text-text-main transition-colors font-medium">
               <Phone className="w-4 h-4 text-orange-500" />
               <span>+7 (999) 179-28-95</span>
             </a>
+            <button
+              onClick={() => setIsDark(!isDark)}
+              className="p-2.5 bg-surface hover:bg-surface-hover border border-border rounded-full text-text-main transition-colors"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <button 
               onClick={scrollToBooking}
-              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-medium transition-colors"
+              className="px-6 py-2.5 bg-surface hover:bg-surface-hover border border-border rounded-full text-sm font-medium transition-colors"
             >
               Записаться
             </button>
@@ -211,7 +227,7 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.2 }}
-              className="mt-8 text-lg sm:text-xl text-white/60 max-w-2xl mx-auto font-medium"
+              className="mt-8 text-lg sm:text-xl text-text-muted max-w-2xl mx-auto font-medium"
             >
               Качественная работа, внимание к деталям и атмосфера, в которую хочется возвращаться.
             </motion.p>
@@ -228,12 +244,12 @@ export default function App() {
               >
                 Записаться онлайн
               </button>
-              <div className="flex items-center gap-4 text-white/80 hover:text-white transition-colors">
-                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+              <div className="flex items-center gap-4 text-text-subtle hover:text-text-main transition-colors">
+                <div className="w-12 h-12 rounded-full bg-surface flex items-center justify-center border border-border">
                   <Phone className="w-5 h-5 text-orange-500" />
                 </div>
                 <div className="text-left">
-                  <div className="text-sm text-white/50">Или по телефону</div>
+                  <div className="text-sm text-text-muted">Или по телефону</div>
                   <a href="tel:+79991792895" className="text-lg font-bold tracking-wide">+7 (999) 179-28-95</a>
                 </div>
               </div>
@@ -242,7 +258,7 @@ export default function App() {
         </section>
 
         {/* Masters Section */}
-        <section className="py-20 border-t border-white/5 relative">
+        <section className="py-20 border-t border-border relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center mb-16">
               <h2 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase mb-4">Наши Мастера</h2>
@@ -258,26 +274,26 @@ export default function App() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className="group relative rounded-3xl p-8 bg-white/5 border border-white/10 hover:border-orange-500/50 transition-all duration-500 hover:bg-white/10 overflow-hidden cursor-pointer"
+                  className="group relative rounded-3xl p-8 bg-surface border border-border hover:border-orange-500/50 transition-all duration-500 hover:bg-surface-hover overflow-hidden cursor-pointer"
                 >
                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-orange-500/10 rounded-full blur-[40px] group-hover:bg-orange-500/30 transition-colors duration-500" />
                   
                   <div className="relative z-10 flex items-start justify-between">
                     <div>
-                      <div className="text-6xl font-black text-white/5 mb-4 group-hover:text-orange-500/10 transition-colors duration-500">
+                      <div className="text-6xl font-black text-watermark mb-4 group-hover:text-orange-500/10 transition-colors duration-500">
                         {master.name.charAt(0)}
                       </div>
                       <h3 className="text-2xl font-bold mb-1 group-hover:text-orange-500 transition-colors">{master.name}</h3>
-                      <p className="text-white/60 font-medium">{master.role}</p>
+                      <p className="text-text-muted font-medium">{master.role}</p>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10 group-hover:border-orange-500/50 group-hover:bg-orange-500/10 transition-all duration-500 group-hover:scale-110 group-hover:rotate-12">
-                      <Scissors className="w-5 h-5 text-white/50 group-hover:text-orange-500 transition-colors duration-500" />
+                    <div className="w-12 h-12 rounded-full bg-surface flex items-center justify-center border border-border group-hover:border-orange-500/50 group-hover:bg-orange-500/10 transition-all duration-500 group-hover:scale-110 group-hover:rotate-12">
+                      <Scissors className="w-5 h-5 text-text-muted group-hover:text-orange-500 transition-colors duration-500" />
                     </div>
                   </div>
                   
                   <div className="mt-12 flex flex-wrap gap-2 relative z-10">
                     {master.categories.map(cat => (
-                      <span key={cat} className="text-xs px-3 py-1.5 rounded-full bg-black/30 border border-white/5 text-white/60 group-hover:border-white/20 transition-colors">
+                      <span key={cat} className="text-xs px-3 py-1.5 rounded-full bg-badge border border-border-light text-text-muted group-hover:border-border transition-colors">
                         {CATEGORIES.find(c => c.id === cat)?.label}
                       </span>
                     ))}
@@ -289,7 +305,7 @@ export default function App() {
         </section>
 
         {/* Services Section */}
-        <section className="py-20 border-t border-white/5 relative bg-white/[0.02]">
+        <section className="py-20 border-t border-border relative bg-surface">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center mb-12">
               <h2 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase mb-4">Услуги и Цены</h2>
@@ -297,7 +313,7 @@ export default function App() {
             </div>
 
             {/* Tabs */}
-            <div className="flex overflow-x-auto no-scrollbar gap-2 p-1 bg-white/5 rounded-2xl mb-8 border border-white/10">
+            <div className="flex overflow-x-auto no-scrollbar gap-2 p-1 bg-surface rounded-2xl mb-8 border border-border">
               {CATEGORIES.map(cat => (
                 <button
                   key={cat.id}
@@ -305,7 +321,7 @@ export default function App() {
                   className={`flex-1 min-w-[120px] py-3 px-4 rounded-xl text-sm font-medium transition-all ${
                     activeTab === cat.id 
                       ? 'bg-orange-500 text-white shadow-lg' 
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
                   }`}
                 >
                   {cat.label}
@@ -314,7 +330,7 @@ export default function App() {
             </div>
 
             {/* Services List */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 sm:p-8 backdrop-blur-sm">
+            <div className="bg-surface border border-border rounded-3xl p-6 sm:p-8 backdrop-blur-sm">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
@@ -328,11 +344,11 @@ export default function App() {
                     <div 
                       key={idx} 
                       onClick={() => handleServiceClick(service.name, activeTab)}
-                      className="flex items-center justify-between group p-3 hover:bg-white/5 rounded-2xl transition-colors cursor-pointer"
+                      className="flex items-center justify-between group p-3 hover:bg-surface-hover rounded-2xl transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-4 flex-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 group-hover:bg-orange-500 group-hover:scale-150 transition-all" />
-                        <span className="text-lg font-medium text-white/80 group-hover:text-white transition-colors">{service.name}</span>
+                        <span className="text-lg font-medium text-text-subtle group-hover:text-text-main transition-colors">{service.name}</span>
                       </div>
                       <span className="text-lg font-bold text-orange-500 whitespace-nowrap bg-orange-500/10 px-4 py-1 rounded-full">{service.price}</span>
                     </div>
@@ -344,21 +360,21 @@ export default function App() {
         </section>
 
         {/* Booking Section */}
-        <section id="booking" className="py-20 border-t border-white/5 relative">
+        <section id="booking" className="py-20 border-t border-border relative">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center mb-12">
               <h2 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase mb-4">Оформить запись</h2>
               <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-red-500 rounded-full" />
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 sm:p-10 backdrop-blur-md relative overflow-hidden">
+            <div className="bg-surface border border-border rounded-3xl p-6 sm:p-10 backdrop-blur-md relative overflow-hidden">
               <AnimatePresence>
                 {isSuccess && (
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-10 bg-[#0a0a0b]/95 backdrop-blur-xl flex flex-col items-center justify-center text-center p-8"
+                    className="absolute inset-0 z-10 bg-bg-main/95 backdrop-blur-xl flex flex-col items-center justify-center text-center p-8"
                   >
                     <motion.div
                       initial={{ scale: 0.5, opacity: 0 }}
@@ -368,7 +384,7 @@ export default function App() {
                       <CheckCircle2 className="w-20 h-20 text-orange-500 mb-6" />
                     </motion.div>
                     <h3 className="text-3xl font-black tracking-tighter mb-2">ВЫ УСПЕШНО ЗАПИСАНЫ</h3>
-                    <p className="text-white/60">Мы ждем вас в назначенное время. До встречи в ВАЙБ.</p>
+                    <p className="text-text-muted">Мы ждем вас в назначенное время. До встречи в ВАЙБ.</p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -377,60 +393,60 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {/* Category */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <Scissors className="w-4 h-4" /> Категория
                     </label>
                     <select 
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
                       required
                     >
                       {CATEGORIES.map(cat => (
-                        <option key={cat.id} value={cat.id} className="bg-[#141414]">{cat.label}</option>
+                        <option key={cat.id} value={cat.id} className="bg-dropdown text-text-main">{cat.label}</option>
                       ))}
                     </select>
                   </div>
 
                   {/* Service */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <Scissors className="w-4 h-4" /> Услуга
                     </label>
                     <select 
                       value={service}
                       onChange={(e) => setService(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
                       required
                     >
-                      <option value="" disabled className="bg-[#141414]">Выберите услугу</option>
+                      <option value="" disabled className="bg-dropdown text-text-main">Выберите услугу</option>
                       {availableServices.map((srv, idx) => (
-                        <option key={idx} value={srv.name} className="bg-[#141414]">{srv.name} - {srv.price}</option>
+                        <option key={idx} value={srv.name} className="bg-dropdown text-text-main">{srv.name} - {srv.price}</option>
                       ))}
                     </select>
                   </div>
 
                   {/* Master */}
                   <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <User className="w-4 h-4" /> Мастер
                     </label>
                     <select 
                       value={master}
                       onChange={(e) => setMaster(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none"
                       required
                     >
-                      <option value="" disabled className="bg-[#141414]">Выберите мастера</option>
+                      <option value="" disabled className="bg-dropdown text-text-main">Выберите мастера</option>
                       {availableMasters.map(m => (
-                        <option key={m.id} value={m.id} className="bg-[#141414]">{m.name} ({m.role})</option>
+                        <option key={m.id} value={m.id} className="bg-dropdown text-text-main">{m.name} ({m.role})</option>
                       ))}
                     </select>
                   </div>
 
                   {/* Date */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <Calendar className="w-4 h-4" /> Дата
                     </label>
                     <input 
@@ -438,28 +454,28 @@ export default function App() {
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       min={new Date().toISOString().split('T')[0]}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all [color-scheme:dark]"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     />
                   </div>
 
                   {/* Time */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <Clock className="w-4 h-4" /> Время
                     </label>
                     <input 
                       type="time"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all [color-scheme:dark]"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     />
                   </div>
 
                   {/* Name */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <User className="w-4 h-4" /> Ваше Имя
                     </label>
                     <input 
@@ -467,14 +483,14 @@ export default function App() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Иван Иванов"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main placeholder:text-text-muted/50 focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all"
                       required
                     />
                   </div>
 
                   {/* Phone */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/60 flex items-center gap-2">
+                    <label className="text-sm font-medium text-text-muted flex items-center gap-2">
                       <Phone className="w-4 h-4" /> Телефон
                     </label>
                     <input 
@@ -482,7 +498,7 @@ export default function App() {
                       value={phone}
                       onChange={handlePhoneChange}
                       placeholder="+7 (999) 000-00-00"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-orange-500 focus:bg-white/10 focus:ring-4 focus:ring-orange-500/10 transition-all"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-text-main placeholder:text-text-muted/50 focus:outline-none focus:border-orange-500 focus:bg-surface-hover focus:ring-4 focus:ring-orange-500/10 transition-all"
                       required
                     />
                   </div>
@@ -502,28 +518,28 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 bg-[#0a0a0b] py-12">
+      <footer className="border-t border-border bg-bg-main py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
             <div>
               <div className="text-3xl font-black tracking-tighter text-orange-500 mb-4">
                 ВАЙБ.
               </div>
-              <p className="text-white/60 text-sm max-w-xs">
+              <p className="text-text-muted text-sm max-w-xs">
                 Мы верим, что хорошая прическа — это не просто стрижка, это уверенность в себе и правильный настрой на весь день.
               </p>
             </div>
             
             <div className="flex flex-col gap-4 md:items-center">
-              <div className="flex items-center gap-3 text-white/80">
+              <div className="flex items-center gap-3 text-text-subtle">
                 <Phone className="w-5 h-5 text-orange-500" />
-                <a href="tel:+79991792895" className="hover:text-white transition-colors">+7 (999) 179-28-95</a>
+                <a href="tel:+79991792895" className="hover:text-text-main transition-colors">+7 (999) 179-28-95</a>
               </div>
-              <div className="flex items-center gap-3 text-white/80">
+              <div className="flex items-center gap-3 text-text-subtle">
                 <MapPin className="w-5 h-5 text-orange-500" />
                 <span>ТД '5 Звёзд' 1 этаж, г. Кызыл</span>
               </div>
-              <div className="flex items-center gap-3 text-white/80">
+              <div className="flex items-center gap-3 text-text-subtle">
                 <Clock className="w-5 h-5 text-orange-500" />
                 <span>Ежедневно 09:00 — 19:00</span>
               </div>
@@ -532,14 +548,14 @@ export default function App() {
             <div className="md:text-right">
               <button 
                 onClick={scrollToBooking}
-                className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium transition-colors"
+                className="px-6 py-3 bg-surface hover:bg-surface-hover border border-border rounded-xl text-sm font-medium transition-colors"
               >
                 Записаться онлайн
               </button>
             </div>
           </div>
           
-          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between text-xs text-white/40">
+          <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted">
             <p>© {new Date().getFullYear()} ВАЙБ. Все права защищены.</p>
             <p className="mt-2 sm:mt-0">Разработано с душой</p>
           </div>
