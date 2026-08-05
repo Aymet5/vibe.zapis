@@ -83,8 +83,9 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
   }, [category, service, masterId, availableMasters]);
 
   // Свободные окошки зависят от мастера, дня и длительности услуги.
+  // Услуга не обязательна: пока её не выбрали, сервер отдаёт сетку под обычную стрижку.
   useEffect(() => {
-    if (!masterId || !service) {
+    if (!masterId) {
       setSlots([]);
       return;
     }
@@ -165,7 +166,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
     } catch (err) {
       setError((err as Error).message);
       // Окошко мог занять кто-то другой — обновляем сетку.
-      if (masterId && service) {
+      if (masterId) {
         api
           .availability(date, masterId, category, service)
           .then((response) => setSlots(response.slots))
@@ -281,15 +282,21 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
             <div className="space-y-2">
               <span className="text-sm font-medium text-text-muted flex items-center gap-2">
                 <Clock className="w-4 h-4" /> Время
-                {selectedService && (
+                {selectedService ? (
                   <span className="text-text-muted/70">· услуга займёт {formatDuration(duration)}</span>
+                ) : (
+                  masterId && (
+                    <span className="text-text-muted/70">
+                      · сетка под обычную стрижку, после выбора услуги пересчитаем
+                    </span>
+                  )
                 )}
               </span>
-              {masterId && service ? (
+              {masterId ? (
                 <SlotGrid slots={slots} value={time} onChange={setTime} loading={slotsLoading} />
               ) : (
                 <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-text-muted">
-                  Выберите услугу и мастера — покажем свободные окошки
+                  Выберите мастера — покажем свободные окошки
                 </p>
               )}
             </div>
