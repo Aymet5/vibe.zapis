@@ -1,13 +1,90 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Парикмахерская ВАЙБ</title>
+
+    <title>Парикмахерская ВАЙБ, Кызыл — онлайн-запись на стрижку</title>
+    <meta
+      name="description"
+      content="Онлайн-запись в парикмахерскую ВАЙБ в Кызыле: мужские и женские стрижки, окрашивание, борода. Свободные окошки видно сразу, скидка 1% за каждый визит. ТД «5 Звёзд», ежедневно 09:00–19:00."
+    />
+    <link rel="canonical" href="https://vibe-cut.ru/" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#f97316" />
+
+    <!-- Ножницы вместо иконки: отдельный файл не нужен, вкладка не пустует. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%82%EF%B8%8F%3C/text%3E%3C/svg%3E"
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Парикмахерская ВАЙБ" />
+    <meta property="og:title" content="Парикмахерская ВАЙБ, Кызыл — онлайн-запись на стрижку" />
+    <meta
+      property="og:description"
+      content="Свободные окошки всех мастеров видно сразу. Скидка 1% за каждый визит, до 100% на одну стрижку."
+    />
+    <meta property="og:url" content="https://vibe-cut.ru/" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta name="twitter:card" content="summary" />
+
+    <!-- Микроразметка для Яндекса и Google: карточка организации в выдаче. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "HairSalon",
+        "name": "Парикмахерская ВАЙБ",
+        "url": "https://vibe-cut.ru/",
+        "description": "Парикмахерская и барбершоп в Кызыле: мужские и женские стрижки, окрашивание, оформление бороды. Онлайн-запись и накопительная скидка.",
+        "telephone": "+7 (999) 179-28-95",
+        "priceRange": "400–600 ₽",
+        "currenciesAccepted": "RUB",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "ТД «5 Звёзд», 1 этаж",
+          "addressLocality": "Кызыл",
+          "addressRegion": "Республика Тыва",
+          "addressCountry": "RU"
+        },
+        "openingHoursSpecification": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "09:00",
+          "closes": "19:00"
+        },
+        "potentialAction": {
+          "@type": "ReserveAction",
+          "name": "Записаться онлайн",
+          "target": "https://vibe-cut.ru/#booking"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Поисковикам и браузерам без JS: главное о салоне текстом. -->
+    <noscript>
+      <h1>Парикмахерская ВАЙБ — Кызыл</h1>
+      <p>
+        Мужские и женские стрижки, окрашивание, оформление бороды. Онлайн-запись к любому мастеру,
+        накопительная скидка 1% за каждый визит.
+      </p>
+      <p>Адрес: ТД «5 Звёзд», 1 этаж, г. Кызыл. Ежедневно с 09:00 до 19:00.</p>
+      <p>Телефон: <a href="tel:+79991792895">+7 (999) 179-28-95</a></p>
+      <p>Для онлайн-записи включите JavaScript или позвоните нам.</p>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

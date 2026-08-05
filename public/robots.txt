@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+# Личный кабинет и панель персонала в поиске не нужны.
+Disallow: /admin
+Disallow: /profile
+Disallow: /api/
+
+Sitemap: https://vibe-cut.ru/sitemap.xml
