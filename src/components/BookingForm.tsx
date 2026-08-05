@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, Clock, Percent, Phone, Scissors, User } from 'lucide-react';
 import {
+  BONUS_PER_VISIT,
   CATEGORIES,
   MASTERS,
   SERVICES,
@@ -213,7 +214,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
               <h3 className="text-2xl font-black tracking-tighter">СНАЧАЛА ВОЙДИТЕ ЧЕРЕЗ ВК</h3>
               <p className="text-text-muted max-w-md mx-auto">
                 Запись открыта только для вошедших: так мы точно знаем, кто записался, копим вашу
-                скидку — 1% за каждый визит — и присылаем подтверждение с напоминанием в личные
+                скидку — {BONUS_PER_VISIT}% за каждый визит — и присылаем подтверждение с напоминанием в личные
                 сообщения ВКонтакте.
               </p>
               <div className="flex justify-center">
@@ -398,7 +399,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
             ) : (
               <p className="text-sm text-text-muted">
                 {maxDiscount === 0
-                  ? 'После первого визита начнём копить вашу скидку: по 1% за каждую стрижку.'
+                  ? `После первого визита начнём копить вашу скидку: по ${BONUS_PER_VISIT}% за каждую стрижку.`
                   : 'Для этой услуги цену определяют на месте — скидку спишет администратор.'}
               </p>
             )}

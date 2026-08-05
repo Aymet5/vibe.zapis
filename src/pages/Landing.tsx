@@ -1,7 +1,15 @@
 import { useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Percent, Phone, Scissors, Sparkles } from 'lucide-react';
-import { CATEGORIES, MASTERS, SERVICES, formatPrice, type CategoryId } from '../../shared/catalog';
+import {
+  BONUS_PER_VISIT,
+  CATEGORIES,
+  MASTERS,
+  MAX_BONUS_PERCENT,
+  SERVICES,
+  formatPrice,
+  type CategoryId,
+} from '../../shared/catalog';
 import { BookingForm, type BookingPreset } from '../components/BookingForm';
 import { ScheduleBoard } from '../components/ScheduleBoard';
 import { SectionHeading } from '../components/ui';
@@ -101,7 +109,8 @@ export function Landing({ today }: { today: string }) {
               <Percent className="w-6 h-6 text-orange-500" />
             </span>
             <p className="text-text-subtle">
-              <span className="font-bold text-text-main">Копите скидку:</span> 1% за каждый визит, до 100%.
+              <span className="font-bold text-text-main">Копите скидку:</span> {BONUS_PER_VISIT}% за каждый
+              визит, до {MAX_BONUS_PERCENT}%.
               Накопленное можно потратить на одну стрижку — целиком или частями.
               {user && (
                 <span className="block mt-1 text-orange-500 font-bold">

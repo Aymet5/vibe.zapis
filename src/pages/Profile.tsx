@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bell, CalendarDays, History, Percent, Phone, Scissors } from 'lucide-react';
-import { MAX_BONUS_PERCENT } from '../../shared/catalog';
+import { BONUS_PER_VISIT, MAX_BONUS_PERCENT } from '../../shared/catalog';
 import type { BonusTransactionView, BookingView } from '../../shared/types';
 import { api } from '../api';
 import { MasterSchedule } from '../components/MasterSchedule';
@@ -56,7 +56,8 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
           <Percent className="w-12 h-12 text-orange-500 mx-auto" />
           <h1 className="text-2xl font-black tracking-tighter uppercase">Личный кабинет</h1>
           <p className="text-text-muted">
-            Войдите через ВКонтакте, чтобы копить скидку — 1% за каждый визит, до 100% — и видеть свои записи.
+            Войдите через ВКонтакте, чтобы копить скидку — {BONUS_PER_VISIT}% за каждый визит, до{' '}
+            {MAX_BONUS_PERCENT}% — и видеть свои записи.
           </p>
           <div className="flex justify-center">
             <VkLoginButton />
@@ -131,7 +132,7 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
           <p className="mt-3 text-sm text-text-muted">
             {user.bonusPercent >= MAX_BONUS_PERCENT
               ? 'Максимум накоплен — следующая стрижка может быть бесплатной.'
-              : `До 100% осталось ${MAX_BONUS_PERCENT - user.bonusPercent} ${plural(
+              : `До ${MAX_BONUS_PERCENT}% осталось ${MAX_BONUS_PERCENT - user.bonusPercent} ${plural(
                   MAX_BONUS_PERCENT - user.bonusPercent,
                   'визит',
                   'визита',

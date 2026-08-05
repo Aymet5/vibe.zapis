@@ -80,8 +80,10 @@ export const SCHEDULE = {
   bookingHorizonDays: 30,
 };
 
-export const MAX_BONUS_PERCENT = 100;
-export const BONUS_PER_VISIT = 1;
+/** Потолок накопленной скидки. Больше на счёт не начислится. */
+export const MAX_BONUS_PERCENT = 20;
+/** Сколько процентов даёт один состоявшийся визит. */
+export const BONUS_PER_VISIT = 5;
 
 export function findMaster(id: string): Master | undefined {
   return MASTERS.find((m) => m.id === id);

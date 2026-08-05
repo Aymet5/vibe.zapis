@@ -1,4 +1,5 @@
 import { Clock, MapPin, Percent, Phone } from 'lucide-react';
+import { BONUS_PER_VISIT, MAX_BONUS_PERCENT } from '../../shared/catalog';
 import { useSession } from '../lib/session';
 
 export function Footer({ onNavigate, onBook }: { onNavigate: (to: string) => void; onBook: () => void }) {
@@ -16,7 +17,7 @@ export function Footer({ onNavigate, onBook }: { onNavigate: (to: string) => voi
             </p>
             <p className="mt-4 flex items-start gap-2 text-sm text-text-subtle">
               <Percent className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-              1% скидки за каждый визит, до 100% на одну стрижку
+              {BONUS_PER_VISIT}% скидки за каждый визит, до {MAX_BONUS_PERCENT}% на одну стрижку
             </p>
           </div>
 

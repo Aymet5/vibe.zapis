@@ -20,6 +20,7 @@ const { cancelBooking, completeBooking, createBooking, getAvailability, markNoSh
   '../server/bookings'
 );
 const { addDays, salonToday } = await import('../server/time');
+const { BONUS_PER_VISIT, MAX_BONUS_PERCENT } = await import('../shared/catalog');
 import type { UserRow } from '../server/db';
 
 const DATE = addDays(salonToday(), 5);
@@ -59,11 +60,11 @@ function book(user: UserRow | undefined, time: string, discount = 0, master = 'a
 
 console.log('\nНачисление и списание процентов');
 
-check('за завершённый визит начисляется 1%', () => {
+check('за завершённый визит начисляется 5%', () => {
   const user = makeUser(0);
   const booking = book(user, '09:00');
   completeBooking(booking.id, { writeOffPercent: 0, finalPrice: null });
-  assert.equal(balance(user.id), 1);
+  assert.equal(balance(user.id), BONUS_PER_VISIT);
 });
 
 check('процент за визит начисляется один раз', () => {
@@ -71,20 +72,20 @@ check('процент за визит начисляется один раз', (
   const booking = book(user, '09:30');
   completeBooking(booking.id, { writeOffPercent: 0, finalPrice: null });
   assert.throws(() => completeBooking(booking.id, { writeOffPercent: 0, finalPrice: null }));
-  assert.equal(balance(user.id), 1);
+  assert.equal(balance(user.id), BONUS_PER_VISIT);
 });
 
-check('баланс не превышает 100%', () => {
-  const user = makeUser(100);
+check('баланс не превышает максимум', () => {
+  const user = makeUser(MAX_BONUS_PERCENT);
   const booking = book(user, '10:00');
   completeBooking(booking.id, { writeOffPercent: 0, finalPrice: null });
-  assert.equal(balance(user.id), 100);
+  assert.equal(balance(user.id), MAX_BONUS_PERCENT);
 });
 
 check('скидка резервируется в момент записи', () => {
-  const user = makeUser(30);
-  book(user, '10:30', 20);
-  assert.equal(balance(user.id), 10, 'зарезервированные 20% списаны с баланса сразу');
+  const user = makeUser(15);
+  book(user, '10:30', 10);
+  assert.equal(balance(user.id), 5, 'зарезервированные 10% списаны с баланса сразу');
 });
 
 check('нельзя заявить больше, чем накоплено', () => {
@@ -94,18 +95,18 @@ check('нельзя заявить больше, чем накоплено', () 
 });
 
 check('один и тот же процент нельзя занять дважды', () => {
-  const user = makeUser(50);
-  book(user, '11:30', 50);
+  const user = makeUser(10);
+  book(user, '11:30', 10);
   assert.equal(balance(user.id), 0);
-  assert.throws(() => book(user, '12:00', 50), /накоплено/);
+  assert.throws(() => book(user, '12:00', 10), /накоплено/);
 });
 
 check('отмена возвращает зарезервированную скидку', () => {
-  const user = makeUser(40);
-  const booking = book(user, '12:30', 40);
+  const user = makeUser(20);
+  const booking = book(user, '12:30', 20);
   assert.equal(balance(user.id), 0);
   cancelBooking(booking.id, 'тест');
-  assert.equal(balance(user.id), 40);
+  assert.equal(balance(user.id), 20);
 });
 
 check('неявка возвращает скидку и не начисляет процент', () => {
@@ -116,41 +117,41 @@ check('неявка возвращает скидку и не начисляет
 });
 
 check('администратор списывает меньше заявленного — остаток возвращается', () => {
-  const user = makeUser(50);
-  const booking = book(user, '13:30', 50);
-  completeBooking(booking.id, { writeOffPercent: 20, finalPrice: null });
-  // 50 зарезервировано, списано 20, возвращено 30, плюс 1% за визит.
-  assert.equal(balance(user.id), 31);
+  const user = makeUser(15);
+  const booking = book(user, '13:30', 15);
+  completeBooking(booking.id, { writeOffPercent: 5, finalPrice: null });
+  // 15 зарезервировано, списано 5, вернулось 10, плюс 5% за визит.
+  assert.equal(balance(user.id), 15);
 });
 
 check('администратор может списать больше заявленного в пределах баланса', () => {
-  const user = makeUser(50);
-  const booking = book(user, '14:00', 10);
-  assert.equal(balance(user.id), 40);
-  completeBooking(booking.id, { writeOffPercent: 45, finalPrice: null });
-  // Списано 45 из 50, остаётся 5, плюс 1% за визит.
-  assert.equal(balance(user.id), 6);
+  const user = makeUser(20);
+  const booking = book(user, '14:00', 5);
+  assert.equal(balance(user.id), 15);
+  completeBooking(booking.id, { writeOffPercent: 18, finalPrice: null });
+  // Списано 18 из 20, остаётся 2, плюс 5% за визит.
+  assert.equal(balance(user.id), 7);
 });
 
 check('списать больше доступного нельзя', () => {
   const user = makeUser(10);
   const booking = book(user, '14:30', 10);
-  assert.throws(() => completeBooking(booking.id, { writeOffPercent: 60, finalPrice: null }), /доступно/);
+  assert.throws(() => completeBooking(booking.id, { writeOffPercent: 15, finalPrice: null }), /доступно/);
 });
 
 check('цена считается со скидкой', () => {
-  const user = makeUser(25);
-  const booking = book(user, '15:00', 25);
+  const user = makeUser(20);
+  const booking = book(user, '15:00', 20);
   assert.equal(booking.base_price, 600);
-  assert.equal(booking.final_price, 450, '600р минус 25%');
+  assert.equal(booking.final_price, 480, '600р минус 20%');
 });
 
-check('скидка 100% обнуляет счёт услуги', () => {
-  const user = makeUser(100);
-  const booking = book(user, '15:30', 100);
-  assert.equal(booking.final_price, 0);
-  completeBooking(booking.id, { writeOffPercent: 100, finalPrice: null });
-  assert.equal(balance(user.id), 1, 'после полного списания остаётся только процент за этот визит');
+check('после полного списания остаётся только процент за визит', () => {
+  const user = makeUser(MAX_BONUS_PERCENT);
+  const booking = book(user, '15:30', MAX_BONUS_PERCENT);
+  assert.equal(balance(user.id), 0);
+  completeBooking(booking.id, { writeOffPercent: MAX_BONUS_PERCENT, finalPrice: null });
+  assert.equal(balance(user.id), BONUS_PER_VISIT);
 });
 
 check('на услугу без фиксированной цены скидку заранее не заявить', () => {

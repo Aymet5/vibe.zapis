@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { minutesToTime } from '../../shared/catalog';
+import { BONUS_PER_VISIT, MAX_BONUS_PERCENT, minutesToTime } from '../../shared/catalog';
 import { BookingError, cancelBooking, confirmBooking, getBooking } from '../bookings';
 import { db, type BookingRow, type UserRow } from '../db';
 import { env } from '../env';
@@ -53,7 +53,7 @@ async function replyToMessage(vkId: string, text: string): Promise<void> {
       [
         `Ваша накопленная скидка: ${user.bonus_percent}%`,
         '',
-        'За каждый визит начисляем 1%. Накопить можно до 100% и потратить на одну стрижку — целиком или частями.',
+        `За каждый визит начисляем ${BONUS_PER_VISIT}%. Накопить можно до ${MAX_BONUS_PERCENT}% и потратить на одну стрижку — целиком или частями.`,
       ].join('\n'),
     );
     return;

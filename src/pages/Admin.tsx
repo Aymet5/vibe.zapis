@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, LogOut, Search, Upload, Users, XCircle } from 'lucide-react';
-import { applyDiscount } from '../../shared/catalog';
+import { BONUS_PER_VISIT, applyDiscount } from '../../shared/catalog';
 import type { AdminBookingView, BonusTransactionView } from '../../shared/types';
 import { api, type AdminClient, type AdminMaster } from '../api';
 import { DateStrip } from '../components/DateStrip';
@@ -512,7 +512,7 @@ function CompleteForm({
           </label>
           <p className="text-xs text-text-muted">
             Клиент заявил {booking.discountPercent}%. Неиспользованный остаток вернётся на его счёт, а за
-            визит начислится 1%.
+            визит начислится {BONUS_PER_VISIT}%.
           </p>
         </>
       ) : (
@@ -533,7 +533,7 @@ function CompleteForm({
 
       <div className="flex flex-wrap gap-2">
         <Button loading={saving} onClick={() => void submit()}>
-          {booking.userId ? 'Завершить и начислить 1%' : 'Завершить визит'}
+          {booking.userId ? `Завершить и начислить ${BONUS_PER_VISIT}%` : 'Завершить визит'}
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
           Отмена
