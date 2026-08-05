@@ -58,6 +58,15 @@ export const env = {
     callbackSecret: optional('VK_CALLBACK_SECRET'),
     /** Строка, которую ВК ждёт в ответ при подтверждении адреса сервера. */
     callbackConfirmation: optional('VK_CALLBACK_CONFIRMATION'),
+    /**
+     * Беседы сотрудников, куда бот пишет о новых записях и отменах.
+     * peer_id беседы = 2000000000 + её номер (он же виден в адресе: vk.com/im?sel=c5 → 2000000005).
+     * Сообщество должно быть добавлено в беседу.
+     */
+    adminPeerIds: (optional('VK_ADMIN_PEER_IDS') ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
     apiVersion: optional('VK_API_VERSION') ?? '5.199',
     /** Вход через ВК доступен только когда заполнены оба ключа приложения. */
     get loginEnabled() {

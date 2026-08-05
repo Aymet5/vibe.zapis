@@ -172,9 +172,8 @@ check('на услугу без фиксированной цены скидку
   );
 });
 
-check('у гостевой записи скидки нет', () => {
-  const booking = book(undefined, '16:30');
-  assert.throws(() => completeBooking(booking.id, { writeOffPercent: 5, finalPrice: null }), /гостевой/);
+check('без входа через ВК записаться нельзя', () => {
+  assert.throws(() => book(undefined, '16:30'), /входа через ВКонтакте/);
 });
 
 console.log('\nСетка окошек');
@@ -194,7 +193,7 @@ check('занятое окошко пропадает из доступных', 
     clientName: 'Тест Клиент',
     clientPhone: '+7 (999) 000-00-00',
     discountPercent: 0,
-    user: undefined,
+    user: makeUser(0),
   });
   const availabilityAfter = getAvailability(GRID_DATE, 'kezhik', 30);
   assert.equal(availabilityAfter.slots.find((s) => s.time === slot.time)?.available, false);
@@ -210,7 +209,7 @@ check('длинная услуга закрывает несколько око�
     clientName: 'Тест Клиент',
     clientPhone: '+7 (999) 000-00-00',
     discountPercent: 0,
-    user: undefined,
+    user: makeUser(0),
   });
   const slots = getAvailability(GRID_DATE, 'aydis', 30).slots;
   // Мелирование идёт 3 часа: 16:00, 16:30, 17:00, 17:30, 18:00, 18:30.
@@ -231,7 +230,7 @@ check('нельзя записаться так, чтобы услуга не у
         clientName: 'Тест Клиент',
         clientPhone: '+7 (999) 000-00-00',
         discountPercent: 0,
-        user: undefined,
+        user: makeUser(0),
       }),
     /закрытия/,
   );
@@ -249,7 +248,7 @@ check('мастеру нельзя назначить чужую категор�
         clientName: 'Тест Клиент',
         clientPhone: '+7 (999) 000-00-00',
         discountPercent: 0,
-        user: undefined,
+        user: makeUser(0),
       }),
     /не оказывает/,
   );
@@ -267,7 +266,7 @@ check('на прошедшую дату записаться нельзя', () =
         clientName: 'Тест Клиент',
         clientPhone: '+7 (999) 000-00-00',
         discountPercent: 0,
-        user: undefined,
+        user: makeUser(0),
       }),
     /прошедшую дату/,
   );

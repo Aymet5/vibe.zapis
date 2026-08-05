@@ -208,6 +208,19 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
             )}
           </AnimatePresence>
 
+          {!user ? (
+            <div className="text-center space-y-5 py-4">
+              <h3 className="text-2xl font-black tracking-tighter">СНАЧАЛА ВОЙДИТЕ ЧЕРЕЗ ВК</h3>
+              <p className="text-text-muted max-w-md mx-auto">
+                Запись открыта только для вошедших: так мы точно знаем, кто записался, копим вашу
+                скидку — 1% за каждый визит — и присылаем подтверждение с напоминанием в личные
+                сообщения ВКонтакте.
+              </p>
+              <div className="flex justify-center">
+                <VkLoginButton label="Войти через ВКонтакте" />
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-7">
             {/* Категория */}
             <div className="space-y-2">
@@ -326,8 +339,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
             </div>
 
             {/* Скидка */}
-            {user ? (
-              discountAvailable ? (
+            {discountAvailable ? (
                 <div className="rounded-2xl border border-orange-500/30 bg-orange-500/5 p-5 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-medium flex items-center gap-2">
@@ -383,23 +395,12 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
                     стрижки. Если запись отменить — вернутся на счёт.
                   </p>
                 </div>
-              ) : (
-                <p className="text-sm text-text-muted">
-                  {maxDiscount === 0
-                    ? 'После первого визита начнём копить вашу скидку: по 1% за каждую стрижку.'
-                    : 'Для этой услуги цену определяют на месте — скидку спишет администратор.'}
-                </p>
-              )
             ) : (
-              <div className="rounded-2xl border border-border bg-bg-main p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-                <div>
-                  <p className="font-bold">Записаться можно и без входа</p>
-                  <p className="text-sm text-text-muted">
-                    Но тогда не копится скидка — 1% за каждый визит, до 100%.
-                  </p>
-                </div>
-                <VkLoginButton compact label="Войти через ВК" />
-              </div>
+              <p className="text-sm text-text-muted">
+                {maxDiscount === 0
+                  ? 'После первого визита начнём копить вашу скидку: по 1% за каждую стрижку.'
+                  : 'Для этой услуги цену определяют на месте — скидку спишет администратор.'}
+              </p>
             )}
 
             {basePrice !== null && !discountAvailable && (
@@ -415,6 +416,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
               {submitting ? 'Отправляем…' : 'Подтвердить запись'}
             </Button>
           </form>
+          )}
         </div>
       </div>
     </section>

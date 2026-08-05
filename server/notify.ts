@@ -54,7 +54,21 @@ async function notifyTelegram(text: string): Promise<void> {
   );
 }
 
-/** Новая запись: админам — в Telegram, клиенту — в ВК. */
+/** ВК не понимает HTML-разметку Telegram — для беседы отдаём чистый текст. */
+function stripHtml(text: string): string {
+  return text.replace(/<\/?[a-z]+>/gi, '');
+}
+
+/** Уведомление в рабочие беседы ВКонтакте. Ошибки не роняют запись клиента. */
+async function notifyVkChats(htmlText: string): Promise<void> {
+  const peerIds = env.vk.adminPeerIds;
+  if (peerIds.length === 0) return;
+
+  const text = stripHtml(htmlText);
+  await Promise.all(peerIds.map((peerId) => vk.sendToPeer(peerId, text)));
+}
+
+/** Новая запись: админам — в Telegram и рабочую беседу ВК, клиенту — в личку. */
 export async function notifyNewBooking(booking: BookingRow): Promise<void> {
   const user = bookingUser(booking);
 
@@ -82,7 +96,7 @@ export async function notifyNewBooking(booking: BookingRow): Promise<void> {
     'Мы напомним о визите заранее. Если планы изменятся — нажмите «Отменить».',
   ].join('\n');
 
-  const tasks: Promise<unknown>[] = [notifyTelegram(adminText)];
+  const tasks: Promise<unknown>[] = [notifyTelegram(adminText), notifyVkChats(adminText)];
 
   if (user?.vk_id) {
     tasks.push(
@@ -130,16 +144,16 @@ export async function notifyBookingCancelled(booking: BookingRow, byClient: bool
     );
   }
 
-  await notifyTelegram(
-    [
-      '❌ <b>Запись отменена</b>',
-      '',
-      `👤 ${booking.client_name} — ${booking.client_phone}`,
-      `📅 ${slotLine(booking)}`,
-      `✂️ ${booking.service} у ${masterName(booking)}`,
-      byClient ? '<i>Отменил клиент</i>' : '<i>Отменил администратор</i>',
-    ].join('\n'),
-  );
+  const adminText = [
+    '❌ <b>Запись отменена</b>',
+    '',
+    `👤 ${booking.client_name} — ${booking.client_phone}`,
+    `📅 ${slotLine(booking)}`,
+    `✂️ ${booking.service} у ${masterName(booking)}`,
+    byClient ? '<i>Отменил клиент</i>' : '<i>Отменил администратор</i>',
+  ].join('\n');
+
+  await Promise.all([notifyTelegram(adminText), notifyVkChats(adminText)]);
 }
 
 /** Напоминание за N часов до визита. */

@@ -162,6 +162,27 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Пишет в беседу от имени сообщества (peer_id = 2000000000 + номер беседы).
+ * Сообщество должно быть добавлено в беседу, иначе ВК ответит ошибкой доступа.
+ */
+export async function sendToPeer(peerId: string, message: string): Promise<boolean> {
+  if (!env.vk.botEnabled) return false;
+
+  try {
+    await callApi('messages.send', {
+      peer_id: peerId,
+      message,
+      random_id: String(crypto.randomInt(1, 2 ** 31 - 1)),
+      dont_parse_links: '0',
+    });
+    return true;
+  } catch (error) {
+    console.warn(`[vk] не удалось написать в беседу ${peerId}:`, (error as Error).message);
+    return false;
+  }
+}
+
 /** Разрешил ли клиент сообщения от сообщества. */
 export async function isMessagingAllowed(vkId: string): Promise<boolean> {
   if (!env.vk.botEnabled || !env.vk.groupId) return false;

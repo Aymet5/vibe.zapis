@@ -126,6 +126,10 @@ interface ValidatedBooking {
 }
 
 function validate(input: CreateBookingInput): ValidatedBooking {
+  // Записываться могут только вошедшие через ВК: так у каждой записи есть
+  // подтверждённый профиль, копится скидка и бот может написать клиенту.
+  if (!input.user) throw new BookingError('Записаться можно только после входа через ВКонтакте', 401);
+
   if (!isCategoryId(input.category)) throw new BookingError('Неизвестная категория услуг');
 
   const service = findService(input.category, input.service);

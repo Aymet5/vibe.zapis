@@ -7,7 +7,7 @@ export function VkLoginButton({ compact = false, label }: { compact?: boolean; l
   if (config && !config.vkLoginEnabled) {
     return compact ? null : (
       <p className="text-sm text-text-muted">
-        Вход через ВКонтакте пока не подключён — запишитесь как гость или позвоните нам.
+        Вход через ВКонтакте пока не подключён — позвоните нам, запишем вручную.
       </p>
     );
   }
