@@ -3,7 +3,9 @@ import type { BonusTransactionView } from '../../shared/types';
 import { requireClient } from '../auth';
 import { BookingError, cancelBooking, getBooking, toBookingView } from '../bookings';
 import { db, type BonusTransactionRow, type BookingRow } from '../db';
+import { masterByVkId } from '../masters';
 import { notifyBookingCancelled } from '../notify';
+import { isValidDate, salonToday } from '../time';
 import { toPublicUser } from '../views';
 
 export const clientRouter = Router();
@@ -48,6 +50,40 @@ clientRouter.get('/bonuses', (req, res) => {
   }));
 
   res.json({ balance: req.user!.bonus_percent, history });
+});
+
+/**
+ * Записи к самому мастеру. Доступно только тому аккаунту ВК, который
+ * администратор закрепил за мастером в панели.
+ */
+clientRouter.get('/master/bookings', (req, res) => {
+  const master = masterByVkId(req.user!.vk_id);
+  if (!master) {
+    res.status(403).json({ error: 'Этот аккаунт не закреплён за мастером' });
+    return;
+  }
+
+  const scope = String(req.query.scope ?? 'day');
+  const date = String(req.query.date ?? salonToday());
+  if (!isValidDate(date)) {
+    res.status(400).json({ error: 'Некорректная дата' });
+    return;
+  }
+
+  const rows =
+    scope === 'upcoming'
+      ? (db
+          .prepare(
+            `SELECT * FROM bookings
+             WHERE master_id = ? AND date >= ? AND status IN ('pending', 'confirmed')
+             ORDER BY date, start_minutes`,
+          )
+          .all(master.id, salonToday()) as BookingRow[])
+      : (db
+          .prepare('SELECT * FROM bookings WHERE master_id = ? AND date = ? ORDER BY start_minutes')
+          .all(master.id, date) as BookingRow[]);
+
+  res.json({ master, date, bookings: rows.map(toBookingView) });
 });
 
 clientRouter.post('/bookings/:id/cancel', async (req, res) => {

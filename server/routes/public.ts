@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { MASTERS, SCHEDULE, findService, isCategoryId } from '../../shared/catalog';
 import { BookingError, createBooking, getAvailability, toBookingView } from '../bookings';
 import { env } from '../env';
+import { publicMasters } from '../masters';
 import { notifyNewBooking } from '../notify';
 import { isValidDate, salonToday } from '../time';
 import { communityChatUrl } from '../vk';
@@ -18,6 +19,7 @@ publicRouter.get('/config', (req, res) => {
     adminEnabled: Boolean(env.adminPassword),
     today: salonToday(),
     horizonDays: SCHEDULE.bookingHorizonDays,
+    masters: publicMasters(),
     user: req.user ? toPublicUser(req.user) : null,
   });
 });
@@ -59,12 +61,12 @@ publicRouter.get('/schedule', (req, res) => {
   const duration = resolveDuration(req.query.category, req.query.service);
   const category = typeof req.query.category === 'string' ? req.query.category : null;
 
-  const masters = MASTERS.filter((master) => !category || !isCategoryId(category) || master.categories.includes(category)).map(
-    (master) => ({
+  const masters = publicMasters()
+    .filter((master) => !category || !isCategoryId(category) || master.categories.includes(category))
+    .map((master) => ({
       master,
       ...getAvailability(date, master.id, duration),
-    }),
-  );
+    }));
 
   res.json({ date, durationMinutes: duration, masters });
 });

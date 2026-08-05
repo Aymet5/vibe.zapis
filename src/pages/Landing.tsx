@@ -13,7 +13,9 @@ function scrollToBooking() {
 }
 
 export function Landing({ today }: { today: string }) {
-  const { user } = useSession();
+  const { user, config } = useSession();
+  // Фотографии приходят с сервера; пока конфиг не загрузился — карточки из каталога.
+  const masters = config?.masters ?? MASTERS.map((master) => ({ ...master, photo: null }));
   const [activeTab, setActiveTab] = useState<CategoryId>('mens');
   const [preset, setPreset] = useState<BookingPreset | null>(null);
 
@@ -117,7 +119,7 @@ export function Landing({ today }: { today: string }) {
           <SectionHeading title="Наши мастера" />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {MASTERS.map((master, index) => (
+            {masters.map((master, index) => (
               <motion.button
                 key={master.id}
                 type="button"
@@ -137,9 +139,18 @@ export function Landing({ today }: { today: string }) {
 
                 <div className="relative z-10 flex items-start justify-between">
                   <div>
-                    <div className="text-6xl font-black text-watermark mb-4 group-hover:text-orange-500/10 transition-colors duration-500">
-                      {master.name.charAt(0)}
-                    </div>
+                    {master.photo ? (
+                      <img
+                        src={master.photo}
+                        alt={master.name}
+                        loading="lazy"
+                        className="w-24 h-24 rounded-2xl object-cover border border-border mb-4 group-hover:border-orange-500/50 transition-colors duration-500"
+                      />
+                    ) : (
+                      <div className="text-6xl font-black text-watermark mb-4 group-hover:text-orange-500/10 transition-colors duration-500">
+                        {master.name.charAt(0)}
+                      </div>
+                    )}
                     <h3 className="text-2xl font-bold mb-1 group-hover:text-orange-500 transition-colors">
                       {master.name}
                     </h3>

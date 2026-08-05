@@ -72,6 +72,20 @@ db.exec(`
     code_verifier TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  /*
+   * Изменяемая часть карточки мастера. Сам состав мастеров, услуги и категории
+   * лежат в shared/catalog.ts — здесь только то, что меняют через админку:
+   * фотография и id ВКонтакте, по которому мастер видит свои записи.
+   */
+  CREATE TABLE IF NOT EXISTS master_profiles (
+    master_id TEXT PRIMARY KEY,
+    vk_id TEXT,
+    photo TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_master_vk ON master_profiles (vk_id) WHERE vk_id IS NOT NULL;
 `);
 
 export interface UserRow {
@@ -104,6 +118,13 @@ export interface BookingRow {
   bonus_awarded: number;
   reminder_sent_at: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface MasterProfileRow {
+  master_id: string;
+  vk_id: string | null;
+  photo: string | null;
   updated_at: string;
 }
 

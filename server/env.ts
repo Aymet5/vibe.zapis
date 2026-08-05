@@ -45,6 +45,10 @@ export const env = {
   appUrl: (optional('APP_URL') ?? `http://localhost:${number('PORT', 3001)}`).replace(/\/+$/, ''),
   sessionSecret: sessionSecret(),
   databasePath: optional('DATABASE_PATH') ?? path.resolve(process.cwd(), 'data/vibe.sqlite'),
+  /** Куда складывать фотографии мастеров. Рядом с базой, чтобы бэкап был один. */
+  uploadsPath:
+    optional('UPLOADS_PATH') ??
+    path.resolve(path.dirname(optional('DATABASE_PATH') ?? path.resolve(process.cwd(), 'data/vibe.sqlite')), 'uploads'),
 
   /** Пароль в панель администратора. Без него панель недоступна. */
   adminPassword: optional('ADMIN_PASSWORD'),

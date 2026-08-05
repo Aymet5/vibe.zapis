@@ -3,6 +3,7 @@ import { Bell, CalendarDays, History, Percent, Phone, Scissors } from 'lucide-re
 import { MAX_BONUS_PERCENT } from '../../shared/catalog';
 import type { BonusTransactionView, BookingView } from '../../shared/types';
 import { api } from '../api';
+import { MasterSchedule } from '../components/MasterSchedule';
 import { Button, ErrorNote, SectionHeading, Spinner, StatusBadge } from '../components/ui';
 import { VkLoginButton } from '../components/VkLoginButton';
 import { formatDate, formatDateFull, formatDuration, formatPhone, formatTimestamp, plural } from '../lib/format';
@@ -102,6 +103,11 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
         <SectionHeading title={`Привет, ${user.firstName}!`} />
 
         {error && <ErrorNote>{error}</ErrorNote>}
+
+        {/* Кабинет мастера — только для закреплённых аккаунтов */}
+        {user.masterId && config && (
+          <MasterSchedule today={config.today} masterName={user.masterName ?? user.firstName} />
+        )}
 
         {/* Накопленная скидка */}
         <section className="rounded-3xl border border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-transparent p-6 sm:p-8">

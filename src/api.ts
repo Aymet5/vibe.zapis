@@ -3,6 +3,7 @@ import type {
   AvailabilityResponse,
   BonusTransactionView,
   BookingView,
+  PublicMaster,
   PublicUser,
 } from '../shared/types';
 import type { CategoryId, Master } from '../shared/catalog';
@@ -38,13 +39,18 @@ export interface AppConfig {
   adminEnabled: boolean;
   today: string;
   horizonDays: number;
+  masters: PublicMaster[];
   user: PublicUser | null;
 }
 
 export interface ScheduleResponse {
   date: string;
   durationMinutes: number;
-  masters: (AvailabilityResponse & { master: Master })[];
+  masters: (AvailabilityResponse & { master: PublicMaster })[];
+}
+
+export interface AdminMaster extends PublicMaster {
+  vkId: string | null;
 }
 
 export interface CreateBookingPayload {
@@ -83,6 +89,12 @@ export const api = {
 
   cancelMyBooking: (id: number) =>
     request<{ booking: BookingView }>(`/me/bookings/${id}/cancel`, { method: 'POST' }),
+
+  /** Записи к самому мастеру — только для аккаунтов, закреплённых за мастером. */
+  masterBookings: (params: { scope: 'day' | 'upcoming'; date?: string }) =>
+    request<{ master: Master; date: string; bookings: BookingView[] }>(
+      `/me/master/bookings?scope=${params.scope}${params.date ? `&date=${params.date}` : ''}`,
+    ),
 
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
 
@@ -123,6 +135,25 @@ export const api = {
         bookings: AdminBookingView[];
         bonusHistory: BonusTransactionView[];
       }>(`/admin/clients/${id}`),
+
+    masters: () => request<{ masters: AdminMaster[] }>('/admin/masters'),
+
+    setMasterVk: (id: string, vkId: string) =>
+      request<{ masters: AdminMaster[] }>(`/admin/masters/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ vkId }),
+      }),
+
+    /** Файл уходит телом запроса как есть — сервер разбирает его по Content-Type. */
+    uploadMasterPhoto: (id: string, file: File) =>
+      request<{ masters: AdminMaster[] }>(`/admin/masters/${id}/photo`, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      }),
+
+    deleteMasterPhoto: (id: string) =>
+      request<{ masters: AdminMaster[] }>(`/admin/masters/${id}/photo`, { method: 'DELETE' }),
 
     adjustBonus: (id: number, delta: number, reason: string) =>
       request<{ balance: number }>(`/admin/clients/${id}/bonus`, {

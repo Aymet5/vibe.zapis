@@ -1,4 +1,10 @@
-import type { CategoryId } from './catalog';
+import type { CategoryId, Master } from './catalog';
+
+/** Мастер для сайта: карточка из каталога плюс загруженная фотография. */
+export interface PublicMaster extends Master {
+  /** Путь к фотографии на этом же сервере, null — показываем букву имени. */
+  photo: string | null;
+}
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 
@@ -21,6 +27,10 @@ export interface PublicUser {
   /** Разрешил ли клиент сообщения от сообщества ВК. */
   vkMessagesAllowed: boolean;
   visitsCount: number;
+  /** Если аккаунт закреплён за мастером — его id, иначе null. */
+  masterId: string | null;
+  /** Имя мастера для заголовка кабинета. */
+  masterName: string | null;
 }
 
 export interface BookingView {

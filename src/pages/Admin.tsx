@@ -1,19 +1,20 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, LogOut, Search, Users, XCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CheckCircle2, LogOut, Search, Upload, Users, XCircle } from 'lucide-react';
 import { applyDiscount } from '../../shared/catalog';
 import type { AdminBookingView, BonusTransactionView } from '../../shared/types';
-import { api, type AdminClient } from '../api';
+import { api, type AdminClient, type AdminMaster } from '../api';
 import { DateStrip } from '../components/DateStrip';
 import { Button, ErrorNote, Spinner, StatusBadge, inputClass } from '../components/ui';
 import { formatDate, formatDateFull, formatTimestamp } from '../lib/format';
 
-type Tab = 'day' | 'pending' | 'upcoming' | 'clients';
+type Tab = 'day' | 'pending' | 'upcoming' | 'clients' | 'masters';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'pending', label: 'Ждут подтверждения' },
   { id: 'day', label: 'На день' },
   { id: 'upcoming', label: 'Все предстоящие' },
   { id: 'clients', label: 'Клиенты' },
+  { id: 'masters', label: 'Мастера' },
 ];
 
 export function Admin({ today }: { today: string }) {
@@ -103,7 +104,7 @@ function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (tab === 'clients') return;
+    if (tab === 'clients' || tab === 'masters') return;
     setLoading(true);
     setError('');
     try {
@@ -155,6 +156,8 @@ function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }
 
         {tab === 'clients' ? (
           <ClientsTab />
+        ) : tab === 'masters' ? (
+          <MastersTab />
         ) : (
           <>
             {tab === 'day' && (
@@ -181,6 +184,165 @@ function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MastersTab() {
+  const [masters, setMasters] = useState<AdminMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.admin
+      .masters()
+      .then((response) => setMasters(response.masters))
+      .catch((err) => setError((err as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-text-muted py-10">
+        <Spinner /> Загружаем мастеров…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-text-muted">
+        Фотография видна на главной странице. По id ВКонтакте мастер, войдя на сайт через ВК, увидит
+        в личном кабинете свои записи — и больше ничего.
+      </p>
+
+      {error && <ErrorNote>{error}</ErrorNote>}
+
+      {masters.map((master) => (
+        <MasterCard key={master.id} master={master} onUpdated={setMasters} onError={setError} />
+      ))}
+    </div>
+  );
+}
+
+function MasterCard({
+  master,
+  onUpdated,
+  onError,
+}: {
+  master: AdminMaster;
+  onUpdated: (masters: AdminMaster[]) => void;
+  onError: (message: string) => void;
+}) {
+  const [vkId, setVkId] = useState(master.vkId ?? '');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const run = async (action: () => Promise<{ masters: AdminMaster[] }>) => {
+    setBusy(true);
+    onError('');
+    setSaved(false);
+    try {
+      onUpdated((await action()).masters);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickPhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Поле сбрасываем, иначе тот же файл второй раз не выберется.
+    event.target.value = '';
+    if (file) void run(() => api.admin.uploadMasterPhoto(master.id, file));
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-5 flex flex-col sm:flex-row gap-5">
+      {master.photo ? (
+        <img
+          src={master.photo}
+          alt={master.name}
+          className="w-24 h-24 rounded-2xl object-cover border border-border shrink-0"
+        />
+      ) : (
+        <div className="w-24 h-24 rounded-2xl border border-dashed border-border flex items-center justify-center text-4xl font-black text-text-muted/40 shrink-0">
+          {master.name.charAt(0)}
+        </div>
+      )}
+
+      <div className="flex-1 space-y-4">
+        <div>
+          <p className="font-bold text-lg">{master.name}</p>
+          <p className="text-sm text-text-muted">{master.role}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={pickPhoto}
+            className="hidden"
+          />
+          <Button variant="ghost" onClick={() => fileInput.current?.click()} disabled={busy}>
+            <Upload className="w-4 h-4" /> {master.photo ? 'Заменить фото' : 'Загрузить фото'}
+          </Button>
+          {master.photo && (
+            <Button
+              variant="ghost"
+              onClick={() => void run(() => api.admin.deleteMasterPhoto(master.id))}
+              disabled={busy}
+            >
+              Убрать фото
+            </Button>
+          )}
+          <span className="text-xs text-text-muted">JPG, PNG или WebP, до 5 МБ</span>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-text-muted">id ВКонтакте мастера</label>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={vkId}
+              onChange={(event) => setVkId(event.target.value)}
+              placeholder="123456789"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <Button
+              onClick={() => void run(() => api.admin.setMasterVk(master.id, vkId))}
+              loading={busy}
+            >
+              Сохранить
+            </Button>
+          </div>
+          <p className="text-xs text-text-muted">
+            Только цифры. Узнать: страница мастера во ВКонтакте → «Ещё» → «Сохранить в закладки», в
+            адресе будет id. Пустое поле снимает привязку.
+            {master.vkId && (
+              <>
+                {' '}
+                Сейчас:{' '}
+                <a
+                  href={`https://vk.com/id${master.vkId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-orange-500 hover:underline"
+                >
+                  vk.com/id{master.vkId}
+                </a>
+              </>
+            )}
+          </p>
+          {saved && <p className="text-xs text-green-500">Сохранено</p>}
+        </div>
       </div>
     </div>
   );

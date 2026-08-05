@@ -90,9 +90,19 @@ export function ScheduleBoard({ today, onPick }: ScheduleBoardProps) {
                 return (
                   <div key={master.id} className="rounded-3xl border border-border bg-surface p-5">
                     <div className="flex items-center justify-between gap-3 mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold">{master.name}</h3>
-                        <p className="text-sm text-text-muted">{master.role}</p>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {master.photo && (
+                          <img
+                            src={master.photo}
+                            alt={master.name}
+                            loading="lazy"
+                            className="w-11 h-11 rounded-full object-cover border border-border shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <h3 className="text-lg font-bold truncate">{master.name}</h3>
+                          <p className="text-sm text-text-muted truncate">{master.role}</p>
+                        </div>
                       </div>
                       <span
                         className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${

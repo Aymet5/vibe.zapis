@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import express, { Router, type Response } from 'express';
 import { MAX_BONUS_PERCENT } from '../../shared/catalog';
 import type { BonusTransactionView } from '../../shared/types';
 import { checkAdminPassword, loginAdmin, logoutAdmin, requireAdmin } from '../auth';
@@ -14,6 +14,14 @@ import {
 } from '../bookings';
 import { db, type BonusTransactionRow, type BookingRow, type UserRow } from '../db';
 import { env } from '../env';
+import {
+  MAX_PHOTO_BYTES,
+  MasterError,
+  adminMasters,
+  deleteMasterPhoto,
+  saveMasterPhoto,
+  setMasterVkId,
+} from '../masters';
 import { notifyBookingCancelled, notifyBookingConfirmed, notifyVisitCompleted } from '../notify';
 import { isValidDate, salonToday } from '../time';
 
@@ -193,6 +201,53 @@ adminRouter.post('/bookings/:id/complete', (req, res) => {
       );
     },
   );
+});
+
+// ─── Мастера: фотография и привязка к аккаунту ВК ───
+
+function handleMasterAction(res: Response, action: () => void): void {
+  try {
+    action();
+    res.json({ masters: adminMasters() });
+  } catch (error) {
+    if (error instanceof MasterError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    console.error('[admin] ошибка при изменении мастера:', error);
+    res.status(500).json({ error: 'Не удалось сохранить' });
+  }
+}
+
+adminRouter.get('/masters', (_req, res) => {
+  res.json({ masters: adminMasters() });
+});
+
+/** id ВКонтакте мастера. Пустая строка снимает привязку. */
+adminRouter.patch('/masters/:id', (req, res) => {
+  handleMasterAction(res, () => setMasterVkId(req.params.id, String(req.body?.vkId ?? '')));
+});
+
+/**
+ * Фотография приходит телом запроса как есть — так обходимся без библиотеки
+ * для multipart и без раздувания картинки в base64.
+ */
+adminRouter.put(
+  '/masters/:id/photo',
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_PHOTO_BYTES }),
+  (req, res) => {
+    if (!Buffer.isBuffer(req.body)) {
+      res.status(415).json({ error: 'Подойдёт JPG, PNG или WebP' });
+      return;
+    }
+    handleMasterAction(res, () =>
+      saveMasterPhoto(req.params.id, String(req.headers['content-type'] ?? ''), req.body as Buffer),
+    );
+  },
+);
+
+adminRouter.delete('/masters/:id/photo', (req, res) => {
+  handleMasterAction(res, () => deleteMasterPhoto(req.params.id));
 });
 
 /** Поиск клиента по имени, телефону или id ВКонтакте. */

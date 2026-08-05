@@ -31,6 +31,9 @@ app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Метод не найден' });
 });
 
+// Фотографии мастеров лежат рядом с базой, а не в dist — их не сносит пересборка.
+app.use('/uploads', express.static(env.uploadsPath, { maxAge: '7d', fallthrough: false }));
+
 // Собранный фронтенд. В разработке фронт крутится на Vite и ходит сюда через прокси.
 const distDir = path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(distDir)) {
