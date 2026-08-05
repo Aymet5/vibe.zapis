@@ -45,7 +45,26 @@ npm start                           # запустить сервер
 умолчанию 3001). После каждого обновления кода нужно повторить
 `npm run build` и перезапустить сервис.
 
-### systemd
+Установка зависимостей от root требует `npm ci --unsafe-perm`: иначе npm
+понижает права при сборке нативного модуля `better-sqlite3` и она падает.
+
+### pm2 (так развёрнут рабочий сервер)
+
+```bash
+pm2 start npm --name vibe --cwd /opt/vibe -- start
+pm2 save                      # чтобы процесс поднялся после перезагрузки
+pm2 startup                   # один раз, если pm2 ещё не в автозапуске
+```
+
+Обновление после изменений в коде:
+
+```bash
+cd /opt/vibe && git pull && npm ci --unsafe-perm && npm run build && pm2 restart vibe
+```
+
+Логи — `pm2 logs vibe`.
+
+### systemd (альтернатива pm2)
 
 `/etc/systemd/system/vibe.service`:
 
@@ -72,11 +91,14 @@ systemctl enable --now vibe
 
 ### nginx
 
+Домен сайта — **vibe-cut.ru** (A-запись должна указывать на IP сервера).
+
 ```nginx
 server {
-    server_name vibe-kyzyl.ru;
+    server_name vibe-cut.ru www.vibe-cut.ru;
     listen 443 ssl;
     # ssl_certificate ... (например, от certbot)
+    client_max_body_size 10m;
 
     location / {
         proxy_pass http://127.0.0.1:3001;
@@ -90,6 +112,13 @@ server {
 
 Заголовок `X-Forwarded-For` важен: по нему считается лимит попыток ввода
 пароля в панель.
+
+Сертификат выпускается certbot'ом, он же дописывает секцию `ssl_*` и редирект
+с 80 порта:
+
+```bash
+certbot --nginx -d vibe-cut.ru -d www.vibe-cut.ru
+```
 
 ## Разработка
 
