@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# База с данными клиентов и накопленными скидками
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
