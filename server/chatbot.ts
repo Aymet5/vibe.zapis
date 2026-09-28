@@ -1,4 +1,4 @@
-import { findMaster } from '../shared/catalog';
+import { findMaster, minutesToTime } from '../shared/catalog';
 import { db, getSetting, setSetting } from './db';
 import { GigaChatError, gigachatComplete, gigachatKey, type ChatMessage } from './gigachat';
 import { botInfo, maxToken, sendToMaxChat } from './max';
@@ -181,7 +181,10 @@ function todaySummary(): string {
   return `Записей на сегодня: ${total} (${perMaster}).`;
 }
 
-/** Утреннее вдохновение во все рабочие чаты. Возвращает текст, который отправили. */
+/**
+ * Вдохновляющее сообщение во все рабочие чаты: по расписанию утром или по
+ * кнопке из админки в любое время. Возвращает текст, который отправили.
+ */
 export async function postMorningMessage(): Promise<string> {
   const text = finishText(
     await gigachatComplete([
@@ -189,8 +192,8 @@ export async function postMorningMessage(): Promise<string> {
       {
         role: 'user',
         content: [
-          `Сегодня ${formatDateHuman(salonToday())}. ${todaySummary()}`,
-          'Напиши мастерам утреннее сообщение перед открытием салона: пожелай хорошего дня и вдохнови.',
+          `Сегодня ${formatDateHuman(salonToday())}, сейчас ${minutesToTime(salonMinutesOfDay())} по времени Кызыла. ${todaySummary()}`,
+          'Напиши мастерам вдохновляющее сообщение, уместное для этого времени суток: утром — пожелай хорошего дня, днём — подбодри, вечером — поблагодари за день.',
           'Если есть записи — упомяни их число, как написано выше, ничего не добавляя.',
         ].join(' '),
       },
