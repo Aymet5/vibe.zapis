@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, CheckCircle2, LogOut, Search, Send, Sparkles, Trash2, Upload, Users, XCircle } from 'lucide-react';
-import { BONUS_PER_VISIT, applyDiscount } from '../../shared/catalog';
+import { BONUS_PER_VISIT, CATEGORIES, applyDiscount, type CategoryId } from '../../shared/catalog';
 import type { AdminBookingView, BonusTransactionView } from '../../shared/types';
 import {
   api,
@@ -222,11 +222,13 @@ function MastersTab() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-text-muted">
-        Фотография видна на главной странице. По id ВКонтакте мастер, войдя на сайт через ВК, увидит
-        в личном кабинете свои записи — и больше ничего.
+        Имя, должность и фото видят клиенты на сайте и в MAX. По id ВКонтакте мастер, войдя на сайт через ВК,
+        увидит в личном кабинете свои записи — и больше ничего.
       </p>
 
       {error && <ErrorNote>{error}</ErrorNote>}
+
+      <NewMasterForm onCreated={setMasters} onError={setError} />
 
       {masters.map((master) => (
         <MasterCard key={master.id} master={master} onUpdated={setMasters} onError={setError} />
@@ -245,6 +247,10 @@ function MasterCard({
   onError: (message: string) => void;
 }) {
   const [vkId, setVkId] = useState(master.vkId ?? '');
+  const [name, setName] = useState(master.name);
+  const [role, setRole] = useState(master.role);
+  const [categories, setCategories] = useState<CategoryId[]>(master.categories);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -286,9 +292,49 @@ function MasterCard({
       )}
 
       <div className="flex-1 space-y-4">
-        <div>
-          <p className="font-bold text-lg">{master.name}</p>
-          <p className="text-sm text-text-muted">{master.role}</p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Имя"
+              className={`${inputClass} font-bold`}
+            />
+            <input
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+              placeholder="Должность, например «Барбер»"
+              className={inputClass}
+            />
+          </div>
+          <CategoryPicker value={categories} onChange={setCategories} />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => void run(() => api.admin.updateMaster(master.id, { name, role, categories }))}
+              loading={busy}
+              disabled={
+                name.trim() === master.name &&
+                role.trim() === master.role &&
+                categories.join() === master.categories.join()
+              }
+            >
+              Сохранить
+            </Button>
+            {confirmDelete ? (
+              <>
+                <Button variant="danger" onClick={() => void run(() => api.admin.deleteMaster(master.id))} disabled={busy}>
+                  Да, удалить {master.name}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmDelete(false)} disabled={busy}>
+                  Отмена
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" onClick={() => setConfirmDelete(true)} disabled={busy}>
+                <Trash2 className="w-4 h-4" /> Удалить мастера
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1109,9 +1155,18 @@ function ChatbotSection() {
         мастеров и по утрам (8:30–9:30) желает хорошего дня с числом записей на сегодня. Примерно каждое третье
         сообщение — с тувинской фразой. Тексты пишет GigaChat.
         {state.chats.length > 0
-          ? ` Чаты: ${state.chats.join(', ')}.`
+          ? ` Чаты: ${state.chats.map((chat) => chat.title).join(', ')}.`
           : ' Сначала включите групповой чат MAX в разделе выше.'}
       </p>
+
+      {state.chats
+        .filter((chat) => chat.botIsAdmin === false)
+        .map((chat) => (
+          <ErrorNote key={chat.title}>
+            В чате «{chat.title}» бот не администратор, поэтому MAX не присылает ему сообщения — отвечать он не
+            может. Откройте чат в MAX → участники → «Вайб Салон» → сделайте администратором.
+          </ErrorNote>
+        ))}
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
@@ -1184,5 +1239,92 @@ function ChatbotSection() {
         </p>
       )}
     </section>
+  );
+}
+
+function CategoryPicker({ value, onChange }: { value: CategoryId[]; onChange: (next: CategoryId[]) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {CATEGORIES.map((category) => {
+        const checked = value.includes(category.id);
+        return (
+          <button
+            key={category.id}
+            type="button"
+            onClick={() => onChange(checked ? value.filter((id) => id !== category.id) : [...value, category.id])}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+              checked ? 'border-orange-500 bg-orange-500 text-white' : 'border-border bg-bg-main text-text-muted'
+            }`}
+          >
+            {checked ? '✓ ' : ''}
+            {category.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function NewMasterForm({
+  onCreated,
+  onError,
+}: {
+  onCreated: (masters: AdminMaster[]) => void;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+  const [categories, setCategories] = useState<CategoryId[]>(['mens']);
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    setBusy(true);
+    onError('');
+    try {
+      onCreated((await api.admin.createMaster({ name, role, categories })).masters);
+      setName('');
+      setRole('');
+      setCategories(['mens']);
+      setOpen(false);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button variant="ghost" onClick={() => setOpen(true)}>
+        <Users className="w-4 h-4" /> Добавить мастера
+      </Button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-orange-500/40 bg-surface p-5 space-y-3">
+      <p className="font-bold">Новый мастер</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Имя" className={inputClass} />
+        <input
+          value={role}
+          onChange={(event) => setRole(event.target.value)}
+          placeholder="Должность, например «Барбер»"
+          className={inputClass}
+        />
+      </div>
+      <p className="text-sm text-text-muted">Какие услуги делает</p>
+      <CategoryPicker value={categories} onChange={setCategories} />
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => void create()} loading={busy} disabled={name.trim().length < 2 || categories.length === 0}>
+          Добавить
+        </Button>
+        <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+          Отмена
+        </Button>
+      </div>
+      <p className="text-xs text-text-muted">Фото и id ВКонтакте можно добавить сразу после — в карточке мастера.</p>
+    </div>
   );
 }

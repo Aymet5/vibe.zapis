@@ -49,6 +49,12 @@ export interface ScheduleResponse {
   masters: (AvailabilityResponse & { master: PublicMaster })[];
 }
 
+export interface MasterInput {
+  name: string;
+  role: string;
+  categories: CategoryId[];
+}
+
 export interface AdminMaster extends PublicMaster {
   vkId: string | null;
 }
@@ -151,6 +157,14 @@ export const api = {
       }>(`/admin/clients/${id}`),
 
     masters: () => request<{ masters: AdminMaster[] }>('/admin/masters'),
+
+    createMaster: (input: MasterInput) =>
+      request<{ masters: AdminMaster[] }>('/admin/masters', { method: 'POST', body: JSON.stringify(input) }),
+
+    updateMaster: (id: string, input: MasterInput) =>
+      request<{ masters: AdminMaster[] }>(`/admin/masters/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+
+    deleteMaster: (id: string) => request<{ masters: AdminMaster[] }>(`/admin/masters/${id}`, { method: 'DELETE' }),
 
     setMasterVk: (id: string, vkId: string) =>
       request<{ masters: AdminMaster[] }>(`/admin/masters/${id}`, {
@@ -258,6 +272,6 @@ export interface ChatbotState {
   chance: number;
   keyConfigured: boolean;
   keyFromEnv: boolean;
-  /** Групповые чаты MAX, где бот разговаривает. */
-  chats: string[];
+  /** Групповые чаты MAX, где бот разговаривает; botIsAdmin null — не удалось проверить. */
+  chats: { title: string; botIsAdmin: boolean | null }[];
 }

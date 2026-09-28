@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { MASTERS, SCHEDULE, findService, isCategoryId } from '../../shared/catalog';
+import { SCHEDULE, findService, isCategoryId } from '../../shared/catalog';
 import { BookingError, createBooking, getAvailability, toBookingView } from '../bookings';
 import { db } from '../db';
 import { env } from '../env';
-import { publicMasters } from '../masters';
+import { getMaster, publicMasters } from '../masters';
 import { notifyNewBooking } from '../notify';
 import { isValidDate, salonToday } from '../time';
 import { communityChatUrl } from '../vk';
@@ -43,7 +43,7 @@ publicRouter.get('/availability', (req, res) => {
     res.status(400).json({ error: 'Некорректная дата' });
     return;
   }
-  if (!MASTERS.some((m) => m.id === masterId)) {
+  if (!getMaster(masterId)?.active) {
     res.status(400).json({ error: 'Такого мастера нет' });
     return;
   }

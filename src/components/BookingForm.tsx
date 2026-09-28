@@ -4,7 +4,6 @@ import { CheckCircle2, Clock, Percent, Phone, Scissors, User } from 'lucide-reac
 import {
   BONUS_PER_VISIT,
   CATEGORIES,
-  MASTERS,
   SERVICES,
   applyDiscount,
   findService,
@@ -71,8 +70,8 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
   }, [preset]);
 
   const availableMasters = useMemo(
-    () => MASTERS.filter((master) => master.categories.includes(category)),
-    [category],
+    () => (config?.masters ?? []).filter((master) => master.categories.includes(category)),
+    [config, category],
   );
 
   const selectedService = service ? findService(category, service) : undefined;

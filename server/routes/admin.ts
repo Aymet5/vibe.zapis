@@ -20,11 +20,14 @@ import {
   adminMasters,
   deleteMasterPhoto,
   saveMasterPhoto,
+  createMaster,
+  deleteMaster,
   setMasterVkId,
+  updateMaster,
 } from '../masters';
 import { chatbotConfig, postMorningMessage, saveChatbotConfig } from '../chatbot';
 import { GIGACHAT_KEY_SETTING, GigaChatError, gigachatComplete, gigachatKey } from '../gigachat';
-import { MaxError, botInfo, maxToken, saveMaxToken } from '../max';
+import { MaxError, botInfo, botIsChatAdmin, maxToken, saveMaxToken } from '../max';
 import { notifyBookingCancelled, notifyBookingConfirmed, notifyVisitCompleted, sendStaffTest } from '../notify';
 import {
   RecipientError,
@@ -234,9 +237,25 @@ adminRouter.get('/masters', (_req, res) => {
   res.json({ masters: adminMasters() });
 });
 
-/** id ВКонтакте мастера. Пустая строка снимает привязку. */
+/** id ВКонтакте, имя и должность мастера. Пустая строка возвращает значение по умолчанию. */
 adminRouter.patch('/masters/:id', (req, res) => {
-  handleMasterAction(res, () => setMasterVkId(req.params.id, String(req.body?.vkId ?? '')));
+  handleMasterAction(res, () => {
+    const body = req.body ?? {};
+    if (typeof body.vkId === 'string') setMasterVkId(req.params.id, body.vkId);
+    if (typeof body.name === 'string') updateMaster(req.params.id, body);
+  });
+});
+
+/** Новый мастер: имя, должность и какие услуги делает. */
+adminRouter.post('/masters', (req, res) => {
+  handleMasterAction(res, () => {
+    createMaster(req.body ?? {});
+  });
+});
+
+/** Мастер уходит с сайта; история его визитов остаётся. */
+adminRouter.delete('/masters/:id', (req, res) => {
+  handleMasterAction(res, () => deleteMaster(req.params.id));
 });
 
 /**
@@ -464,20 +483,21 @@ adminRouter.post('/notifications/test', async (_req, res) => {
 
 // ─── Живой бот в рабочем чате MAX (GigaChat) ───
 
-function chatbotState() {
+async function chatbotState() {
   const key = gigachatKey();
+  const rows = listRecipients().filter((row) => row.channel === 'max' && row.kind === 'chat' && row.enabled);
   return {
     ...chatbotConfig(),
     keyConfigured: Boolean(key),
     keyFromEnv: Boolean(key && key === process.env.GIGACHAT_AUTH_KEY?.trim()),
-    chats: listRecipients()
-      .filter((row) => row.channel === 'max' && row.kind === 'chat' && row.enabled)
-      .map((row) => row.title),
+    chats: await Promise.all(
+      rows.map(async (row) => ({ title: row.title, botIsAdmin: await botIsChatAdmin(row.target) })),
+    ),
   };
 }
 
-adminRouter.get('/chatbot', (_req, res) => {
-  res.json(chatbotState());
+adminRouter.get('/chatbot', async (_req, res) => {
+  res.json(await chatbotState());
 });
 
 adminRouter.put('/chatbot', async (req, res) => {
@@ -494,7 +514,7 @@ adminRouter.put('/chatbot', async (req, res) => {
       morning: typeof body.morning === 'boolean' ? body.morning : undefined,
       chance: typeof body.chance === 'number' ? body.chance : undefined,
     });
-    res.json(chatbotState());
+    res.json(await chatbotState());
   } catch (error) {
     const message = error instanceof GigaChatError ? error.message : 'GigaChat недоступен';
     console.warn('[admin] ключ GigaChat не принят:', (error as Error).message);

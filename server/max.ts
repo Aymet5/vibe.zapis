@@ -93,6 +93,19 @@ export async function saveMaxToken(rawToken: string): Promise<MaxBotInfo | null>
   return info;
 }
 
+/**
+ * Админ ли бот в чате. Без прав администратора MAX не присылает боту
+ * сообщения группы — писать он может, а слышать нет. null — не удалось узнать.
+ */
+export async function botIsChatAdmin(chatId: string): Promise<boolean | null> {
+  try {
+    const me = await maxRequest('GET', `/chats/${encodeURIComponent(chatId)}/members/me`);
+    return Boolean(me?.is_admin || me?.is_owner);
+  } catch {
+    return null;
+  }
+}
+
 /** «Печатает…» в чате, пока готовится ответ. Не критично, если не сработает. */
 export async function showTyping(chatId: string): Promise<void> {
   try {

@@ -4,7 +4,6 @@ import { Percent, Phone, Scissors, Sparkles } from 'lucide-react';
 import {
   BONUS_PER_VISIT,
   CATEGORIES,
-  MASTERS,
   MAX_BONUS_PERCENT,
   SERVICES,
   formatPrice,
@@ -23,7 +22,7 @@ function scrollToBooking() {
 export function Landing({ today }: { today: string }) {
   const { user, config } = useSession();
   // Фотографии приходят с сервера; пока конфиг не загрузился — карточки из каталога.
-  const masters = config?.masters ?? MASTERS.map((master) => ({ ...master, photo: null }));
+  const masters = config?.masters ?? [];
   const [activeTab, setActiveTab] = useState<CategoryId>('mens');
   const [preset, setPreset] = useState<BookingPreset | null>(null);
 

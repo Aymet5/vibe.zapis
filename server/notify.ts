@@ -1,6 +1,7 @@
-import { CATEGORIES, findMaster, minutesToTime } from '../shared/catalog';
+import { CATEGORIES, minutesToTime } from '../shared/catalog';
 import { db, type BookingRow, type UserRow } from './db';
 import { env } from './env';
+import { masterName as masterNameById } from './masters';
 import { maxToken, miniAppLink, sendToMaxChat, sendToMaxUser } from './max';
 import { enabledRecipients } from './recipients';
 import { formatDateHuman } from './time';
@@ -12,7 +13,7 @@ function escapeHtml(text: string): string {
 }
 
 function masterName(booking: BookingRow): string {
-  return findMaster(booking.master_id)?.name ?? booking.master_id;
+  return masterNameById(booking.master_id);
 }
 
 function categoryLabel(booking: BookingRow): string {

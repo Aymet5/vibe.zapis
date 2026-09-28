@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+import { MASTERS } from '../shared/catalog';
 import { env } from './env';
 
 fs.mkdirSync(path.dirname(env.databasePath), { recursive: true });
@@ -146,11 +147,45 @@ export interface BookingRow {
   updated_at: string;
 }
 
+export interface MasterRow {
+  id: string;
+  name: string;
+  role: string;
+  /** JSON-массив категорий услуг. */
+  categories: string;
+  sort: number;
+  active: number;
+  created_at: string;
+}
+
 export interface MasterProfileRow {
   master_id: string;
   vk_id: string | null;
   photo: string | null;
   updated_at: string;
+}
+
+/*
+ * Состав мастеров. Раньше он был зашит в shared/catalog.ts — при первом запуске
+ * переносим его сюда, дальше мастеров добавляют, переименовывают и удаляют
+ * в админке. Удалённый мастер остаётся строкой с active = 0: по нему есть история визитов.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS masters (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT '',
+    categories TEXT NOT NULL DEFAULT '[]',
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+if ((db.prepare('SELECT COUNT(*) AS count FROM masters').get() as { count: number }).count === 0) {
+  const insert = db.prepare('INSERT INTO masters (id, name, role, categories, sort) VALUES (?, ?, ?, ?, ?)');
+  MASTERS.forEach((master, index) =>
+    insert.run(master.id, master.name, master.role, JSON.stringify(master.categories), index),
+  );
 }
 
 // Клиенты, вошедшие из мини-приложения MAX, опознаются по id пользователя MAX.

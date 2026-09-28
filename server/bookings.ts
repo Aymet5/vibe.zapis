@@ -3,7 +3,6 @@ import {
   MAX_BONUS_PERCENT,
   SCHEDULE,
   applyDiscount,
-  findMaster,
   findService,
   generateSlots,
   intervalsOverlap,
@@ -14,6 +13,7 @@ import {
 } from '../shared/catalog';
 import type { AdminBookingView, AvailabilityResponse, BookingStatus, BookingView } from '../shared/types';
 import { db, type BookingRow, type UserRow } from './db';
+import { getMaster } from './masters';
 import { addDays, isValidDate, salonMinutesOfDay, salonToday } from './time';
 
 /** Записи в этих статусах занимают место в расписании мастера. */
@@ -29,7 +29,7 @@ export class BookingError extends Error {
 }
 
 export function toBookingView(row: BookingRow): BookingView {
-  const master = findMaster(row.master_id);
+  const master = getMaster(row.master_id);
   return {
     id: row.id,
     category: row.category as CategoryId,
@@ -164,8 +164,8 @@ function validate(input: CreateBookingInput): ValidatedBooking {
   const service = findService(input.category, input.service);
   if (!service) throw new BookingError('Такой услуги нет в прайсе');
 
-  const master = findMaster(input.masterId);
-  if (!master) throw new BookingError('Такого мастера нет');
+  const master = getMaster(input.masterId);
+  if (!master?.active) throw new BookingError('Такого мастера нет');
   if (!master.categories.includes(input.category)) {
     throw new BookingError(`${master.name} не оказывает услуги этой категории`);
   }

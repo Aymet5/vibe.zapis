@@ -1,6 +1,7 @@
-import { findMaster, minutesToTime } from '../shared/catalog';
+import { minutesToTime } from '../shared/catalog';
 import { db, getSetting, setSetting } from './db';
 import { GigaChatError, gigachatComplete, gigachatKey, type ChatMessage } from './gigachat';
+import { masterName } from './masters';
 import { botInfo, maxToken, sendToMaxChat, showTyping } from './max';
 import { enabledRecipients } from './recipients';
 import { formatDateHuman, salonMinutesOfDay, salonToday } from './time';
@@ -204,7 +205,7 @@ function todaySummary(): string {
 
   const total = rows.reduce((sum, row) => sum + row.count, 0);
   if (total === 0) return 'Записей на сегодня пока нет — день свободный, клиенты ещё запишутся.';
-  const perMaster = rows.map((row) => `${findMaster(row.master_id)?.name ?? row.master_id} — ${row.count}`).join(', ');
+  const perMaster = rows.map((row) => `${masterName(row.master_id)} — ${row.count}`).join(', ');
   return `Записей на сегодня: ${total} (${perMaster}).`;
 }
 
