@@ -10,7 +10,6 @@ import { formatDate, formatDateFull, formatTimestamp } from '../lib/format';
 type Tab = 'day' | 'pending' | 'upcoming' | 'clients' | 'masters' | 'notifications';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'pending', label: 'Ждут подтверждения' },
   { id: 'day', label: 'На день' },
   { id: 'upcoming', label: 'Все предстоящие' },
   { id: 'clients', label: 'Клиенты' },
@@ -98,7 +97,7 @@ function AdminLogin({ enabled, onSuccess }: { enabled: boolean; onSuccess: () =>
 }
 
 function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>('pending');
+  const [tab, setTab] = useState<Tab>('day');
   const [date, setDate] = useState(today);
   const [bookings, setBookings] = useState<AdminBookingView[]>([]);
   const [loading, setLoading] = useState(true);

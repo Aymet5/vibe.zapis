@@ -414,7 +414,7 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
             {error && <ErrorNote>{error}</ErrorNote>}
 
             <Button type="submit" loading={submitting} className="w-full py-4 text-lg">
-              {submitting ? 'Отправляем…' : 'Подтвердить запись'}
+              {submitting ? 'Отправляем…' : 'Записаться'}
             </Button>
           </form>
           )}

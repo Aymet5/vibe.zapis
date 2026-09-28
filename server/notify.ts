@@ -49,16 +49,13 @@ function moveLink(booking: BookingRow): string {
 
 /**
  * Кнопки под сообщением клиенту. «Перенести» — всегда ссылка на кабинет.
- * «Всё верно» и «Отменить» работают только через Callback API; без него
- * вместо отмены тоже даём ссылку в кабинет.
+ * «Отменить» срабатывает прямо в ВК только через Callback API; без него
+ * это тоже ссылка в кабинет.
  */
-function clientButtons(booking: BookingRow, options: { confirm: boolean }): vk.VkKeyboardButton[] {
+function clientButtons(booking: BookingRow): vk.VkKeyboardButton[] {
   const buttons: vk.VkKeyboardButton[] = [];
   const callbacks = vk.callbackButtonsReady();
 
-  if (options.confirm && callbacks) {
-    buttons.push({ label: 'Всё верно', payload: { action: 'confirm', booking: booking.id }, color: 'positive' });
-  }
   buttons.push({ label: 'Перенести', link: moveLink(booking) });
   buttons.push(
     callbacks
@@ -169,12 +166,10 @@ export async function notifyNewBooking(booking: BookingRow): Promise<void> {
     `✂️ <b>Услуга:</b> ${categoryLabel(booking)} — ${booking.service}`,
     `💈 <b>Мастер:</b> ${masterName(booking)}`,
     `💰 <b>${priceLine(booking)}</b>`,
-    '',
-    `Подтвердить: ${env.appUrl}/admin`,
   ].join('\n');
 
   const clientText = [
-    `${hello(booking)} Ваша запись в ВАЙБ принята ✂️`,
+    `${hello(booking)} Вы записаны в ВАЙБ ✅`,
     '',
     `Когда: ${slotLine(booking)}`,
     `Услуга: ${booking.service}`,
@@ -188,7 +183,7 @@ export async function notifyNewBooking(booking: BookingRow): Promise<void> {
   const tasks: Promise<unknown>[] = [notifyStaff(adminText)];
 
   if (user?.vk_id) {
-    tasks.push(vk.sendMessage(user.vk_id, clientText, clientButtons(booking, { confirm: true })));
+    tasks.push(vk.sendMessage(user.vk_id, clientText, clientButtons(booking)));
   }
 
   await Promise.all(tasks);
@@ -254,8 +249,6 @@ export async function notifyBookingRescheduled(
     `Было: <s>${slotLine(previous)}</s>`,
     `📅 <b>Стало:</b> ${slotLine(booking)}`,
     `✂️ ${booking.service} у ${masterName(booking)}`,
-    '',
-    `Подтвердить: ${env.appUrl}/admin`,
   ].join('\n');
 
   const tasks: Promise<unknown>[] = [notifyStaff(adminText)];
@@ -273,7 +266,7 @@ export async function notifyBookingRescheduled(
           '',
           'Напомним о визите заранее.',
         ].join('\n'),
-        clientButtons(booking, { confirm: false }),
+        clientButtons(booking),
       ),
     );
   }
@@ -298,7 +291,7 @@ export async function notifyReminder(booking: BookingRow): Promise<boolean> {
       'Не получается прийти? Перенесите запись на другое время или отмените — окошко займёт другой человек.',
       `Перенести: ${moveLink(booking)}`,
     ].join('\n'),
-    clientButtons(booking, { confirm: false }),
+    clientButtons(booking),
   );
 }
 

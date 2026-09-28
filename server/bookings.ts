@@ -229,6 +229,7 @@ export function recordBonus(
 /**
  * Создаёт запись. Проверка занятости и вставка идут одной транзакцией,
  * иначе два клиента успевают занять одно окошко одновременно.
+ * Окошко свободно — запись сразу подтверждена, салону ничего нажимать не нужно.
  */
 export const createBooking = db.transaction((input: CreateBookingInput): BookingRow => {
   const data = validate(input);
@@ -248,7 +249,7 @@ export const createBooking = db.transaction((input: CreateBookingInput): Booking
       `INSERT INTO bookings
          (user_id, client_name, client_phone, category, service, master_id, date,
           start_minutes, duration_minutes, base_price, discount_percent, final_price, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
     )
     .run(
       input.user?.id ?? null,
@@ -309,8 +310,8 @@ export const cancelBooking = db.transaction((id: number, reason: string): Bookin
 });
 
 /**
- * Перенос на другое время у того же мастера. Запись снова ждёт подтверждения
- * салона, а напоминание уйдёт заново уже под новое время.
+ * Перенос на другое время у того же мастера. Свободное окошко — значит
+ * запись сразу в силе; напоминание уйдёт заново уже под новое время.
  */
 export const rescheduleBooking = db.transaction((id: number, date: string, time: string): BookingRow => {
   const booking = getBooking(id);
@@ -336,7 +337,7 @@ export const rescheduleBooking = db.transaction((id: number, date: string, time:
 
   db.prepare(
     `UPDATE bookings
-     SET date = ?, start_minutes = ?, status = 'pending', reminder_sent_at = NULL, updated_at = datetime('now')
+     SET date = ?, start_minutes = ?, status = 'confirmed', reminder_sent_at = NULL, updated_at = datetime('now')
      WHERE id = ?`,
   ).run(date, startMinutes, id);
   return getBooking(id)!;

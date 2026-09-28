@@ -296,7 +296,7 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
                       onMoved={async (moved) => {
                         setMovingId(null);
                         setMovedNote(
-                          `Запись перенесена на ${formatDateFull(moved.date)}, ${moved.time}. Салон подтвердит новое время.`,
+                          `Запись перенесена на ${formatDateFull(moved.date)}, ${moved.time}. Ждём вас!`,
                         );
                         await load();
                       }}

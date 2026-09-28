@@ -152,6 +152,10 @@ export interface MasterProfileRow {
   updated_at: string;
 }
 
+// Раньше каждая запись ждала ручного подтверждения. Теперь свободное окошко
+// подтверждает её сразу, поэтому оставшиеся «ожидающие» переводим в подтверждённые.
+db.prepare(`UPDATE bookings SET status = 'confirmed', updated_at = datetime('now') WHERE status = 'pending'`).run();
+
 export type NotifyChannel = 'vk' | 'max';
 
 export interface NotifyRecipientRow {
