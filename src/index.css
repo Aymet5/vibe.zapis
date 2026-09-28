@@ -65,3 +65,31 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Мини-приложение MAX: ведёт себя как приложение, а не как страница. */
+.max-app {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+.max-app input,
+.max-app textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  /* 16px — иначе iOS увеличивает страницу при фокусе на поле. */
+  font-size: 16px;
+}
+.max-app button:active {
+  transform: scale(0.98);
+}
+
+.max-step {
+  animation: max-step-in 0.16s ease-out;
+}
+@keyframes max-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}

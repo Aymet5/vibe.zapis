@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { MASTERS, SCHEDULE, findService, isCategoryId } from '../../shared/catalog';
 import { BookingError, createBooking, getAvailability, toBookingView } from '../bookings';
+import { db } from '../db';
 import { env } from '../env';
 import { publicMasters } from '../masters';
 import { notifyNewBooking } from '../notify';
@@ -86,6 +87,11 @@ publicRouter.post('/bookings', async (req, res) => {
       discountPercent: Number(body.discountPercent ?? 0),
       user: req.user,
     });
+
+    // Номер из записи запоминаем в профиле, если его там ещё нет, — в следующий раз подставим сами.
+    if (req.user && !req.user.phone) {
+      db.prepare('UPDATE users SET phone = ? WHERE id = ? AND phone IS NULL').run(booking.client_phone, req.user.id);
+    }
 
     // Клиент не должен ждать сеть ВК и Telegram — отвечаем сразу.
     void notifyNewBooking(booking).catch((error) => {

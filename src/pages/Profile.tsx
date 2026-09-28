@@ -372,7 +372,7 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
 }
 
 /** Выбор нового дня и времени у того же мастера. */
-function RescheduleForm({
+export function RescheduleForm({
   booking,
   today,
   horizonDays,

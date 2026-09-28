@@ -59,6 +59,18 @@ export function maxStartParam(): string | null {
 interface MaxBridge {
   ready?: () => void;
   requestContact?: () => Promise<{ phone?: string } | { error: unknown }>;
+  openLink?: (url: string) => void;
+  BackButton?: {
+    show: () => void;
+    hide: () => void;
+    onClick: (handler: () => void) => void;
+    offClick: (handler: () => void) => void;
+  };
+  HapticFeedback?: {
+    impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
+    notificationOccurred: (type: 'success' | 'error' | 'warning') => void;
+    selectionChanged: () => void;
+  };
 }
 
 let bridge: Promise<MaxBridge | null> | null = null;
@@ -99,4 +111,59 @@ export async function requestMaxPhone(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+type Haptic = 'select' | 'tap' | 'success' | 'error';
+
+/** Отклик вибрацией, как у родных приложений. Вне MAX ничего не делает. */
+export function haptic(kind: Haptic): void {
+  if (!isMaxApp()) return;
+  void loadBridge().then((webApp) => {
+    const feedback = webApp?.HapticFeedback;
+    if (!feedback) return;
+    try {
+      if (kind === 'select') feedback.selectionChanged();
+      else if (kind === 'tap') feedback.impactOccurred('light');
+      else feedback.notificationOccurred(kind);
+    } catch {
+      // Старый клиент MAX без вибрации — не страшно.
+    }
+  });
+}
+
+/**
+ * Системная кнопка «Назад» в шапке MAX. handler = null прячет её.
+ * Возвращает функцию отписки для useEffect.
+ */
+export function setMaxBackButton(handler: (() => void) | null): () => void {
+  if (!isMaxApp()) return () => undefined;
+  let active = true;
+  let attached: (() => void) | null = null;
+
+  void loadBridge().then((webApp) => {
+    const back = webApp?.BackButton;
+    if (!back || !active) return;
+    if (handler) {
+      attached = handler;
+      back.onClick(handler);
+      back.show();
+    } else {
+      back.hide();
+    }
+  });
+
+  return () => {
+    active = false;
+    void loadBridge().then((webApp) => {
+      if (attached) webApp?.BackButton?.offClick(attached);
+    });
+  };
+}
+
+/** Внешняя ссылка — в браузере телефона, а не внутри мини-приложения. */
+export function openExternal(url: string): void {
+  void loadBridge().then((webApp) => {
+    if (webApp?.openLink) webApp.openLink(url);
+    else window.open(url, '_blank', 'noopener');
+  });
 }
