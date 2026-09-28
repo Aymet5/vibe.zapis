@@ -513,6 +513,14 @@ adminRouter.put('/chatbot', async (req, res) => {
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
       morning: typeof body.morning === 'boolean' ? body.morning : undefined,
       chance: typeof body.chance === 'number' ? body.chance : undefined,
+      tuvanChance: typeof body.tuvanChance === 'number' ? body.tuvanChance : undefined,
+      tuvanPhrases:
+        typeof body.tuvanPhrases === 'string'
+          ? body.tuvanPhrases
+              .split('\n')
+              .map((line: string) => line.trim())
+              .filter(Boolean)
+          : undefined,
     });
     res.json(await chatbotState());
   } catch (error) {

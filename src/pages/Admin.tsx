@@ -1083,6 +1083,12 @@ function RecipientList({
 
 // ─── Живой бот в рабочем чате ───
 
+const TUVAN_OPTIONS = [
+  { value: 0, label: 'Никогда' },
+  { value: 0.2, label: 'Иногда' },
+  { value: 0.4, label: 'Часто' },
+];
+
 const CHANCE_OPTIONS = [
   { value: 0, label: 'Только когда зовут' },
   { value: 0.07, label: 'Редко' },
@@ -1096,11 +1102,15 @@ function ChatbotSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [posted, setPosted] = useState('');
+  const [phrases, setPhrases] = useState('');
 
   useEffect(() => {
     api.admin
       .chatbot()
-      .then(setState)
+      .then((next) => {
+        setState(next);
+        setPhrases(next.tuvanPhrases.join('\n'));
+      })
       .catch((err) => setError((err as Error).message));
   }, []);
 
@@ -1152,8 +1162,8 @@ function ChatbotSection() {
 
       <p className="text-sm text-text-muted">
         «Вайб Салон» отвечает, когда его зовут словом «бот» или ответом на его сообщение, иногда сам подбадривает
-        мастеров и по утрам (8:30–9:30) желает хорошего дня с числом записей на сегодня. Примерно каждое третье
-        сообщение — с тувинской фразой. Тексты пишет GigaChat.
+        мастеров и по утрам (8:30–9:30) пишет число записей на сегодня. Отвечает по делу: знает записи на сегодня и
+        завтра, мастеров, часы работы. Иногда вставляет тувинскую фразу из списка ниже. Тексты пишет GigaChat.
         {state.chats.length > 0
           ? ` Чаты: ${state.chats.map((chat) => chat.title).join(', ')}.`
           : ' Сначала включите групповой чат MAX в разделе выше.'}
@@ -1231,6 +1241,47 @@ function ChatbotSection() {
         >
           <Send className="w-4 h-4" /> Написать в группу сейчас
         </Button>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-text-muted">Тувинский: как часто бот вставляет фразу или шутку</p>
+        <div className="flex flex-wrap gap-2">
+          {TUVAN_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={busy}
+              onClick={() => void save({ tuvanChance: option.value })}
+              className={`rounded-full border px-4 py-2 text-sm font-medium ${
+                Math.abs(state.tuvanChance - option.value) < 0.001
+                  ? 'border-orange-500 bg-orange-500 text-white'
+                  : 'border-border bg-bg-main text-text-muted hover:text-text-main'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={phrases}
+          onChange={(event) => setPhrases(event.target.value)}
+          rows={6}
+          placeholder={'Экии, эштер!\nТувинская шутка или поговорка — по одной в строке'}
+          className={`${inputClass} font-mono text-sm`}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            onClick={() => void save({ tuvanPhrases: phrases })}
+            disabled={busy || phrases === state.tuvanPhrases.join('\n')}
+          >
+            Сохранить фразы
+          </Button>
+          <span className="text-xs text-text-muted">
+            По-тувински бот говорит только фразами отсюда — GigaChat тувинского не знает и сочиняет несуществующие
+            слова. Иногда бот отвечает одной такой шуткой, чтобы поднять настроение.
+          </span>
+        </div>
       </div>
 
       {posted && (

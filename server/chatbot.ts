@@ -1,10 +1,10 @@
-import { minutesToTime } from '../shared/catalog';
+import { BONUS_PER_VISIT, MAX_BONUS_PERCENT, minutesToTime } from '../shared/catalog';
 import { db, getSetting, setSetting } from './db';
 import { GigaChatError, gigachatComplete, gigachatKey, type ChatMessage } from './gigachat';
-import { masterName } from './masters';
+import { activeMasters, masterName } from './masters';
 import { botInfo, maxToken, sendToMaxChat, showTyping } from './max';
 import { enabledRecipients } from './recipients';
-import { formatDateHuman, salonMinutesOfDay, salonToday } from './time';
+import { addDays, formatDateHuman, salonMinutesOfDay, salonToday } from './time';
 
 /**
  * «Вайб Салон» в рабочем чате мастеров: отвечает, когда к нему обращаются,
@@ -18,6 +18,8 @@ export const CHATBOT_SETTINGS = {
   morning: 'chatbot_morning',
   chance: 'chatbot_chance',
   lastMorning: 'chatbot_last_morning',
+  tuvanChance: 'chatbot_tuvan_chance',
+  tuvanPhrases: 'chatbot_tuvan_phrases',
 } as const;
 
 export interface ChatbotConfig {
@@ -25,14 +27,22 @@ export interface ChatbotConfig {
   morning: boolean;
   /** Вероятность, что бот сам ответит на обычное сообщение. */
   chance: number;
+  /** Как часто бот вставляет тувинскую фразу или переходит на тувинский, 0..1. */
+  tuvanChance: number;
+  /** Тувинские фразы и шутки — пишут люди в админке, по одной в строке. */
+  tuvanPhrases: string[];
 }
 
 export function chatbotConfig(): ChatbotConfig {
   const chance = Number(getSetting(CHATBOT_SETTINGS.chance));
+  const tuvanChance = Number(getSetting(CHATBOT_SETTINGS.tuvanChance));
+  const phrases = getSetting(CHATBOT_SETTINGS.tuvanPhrases);
   return {
     enabled: getSetting(CHATBOT_SETTINGS.enabled) === '1',
     morning: getSetting(CHATBOT_SETTINGS.morning) !== '0',
     chance: Number.isFinite(chance) && chance >= 0 && chance <= 1 ? chance : 0.15,
+    tuvanChance: Number.isFinite(tuvanChance) && tuvanChance >= 0 && tuvanChance <= 1 ? tuvanChance : 0.2,
+    tuvanPhrases: phrases === undefined ? DEFAULT_TUVAN_PHRASES : splitPhrases(phrases),
   };
 }
 
@@ -42,51 +52,90 @@ export function saveChatbotConfig(config: Partial<ChatbotConfig>): void {
   if (config.chance !== undefined) {
     setSetting(CHATBOT_SETTINGS.chance, String(Math.max(0, Math.min(1, config.chance))));
   }
+  if (config.tuvanChance !== undefined) {
+    setSetting(CHATBOT_SETTINGS.tuvanChance, String(Math.max(0, Math.min(1, config.tuvanChance))));
+  }
+  if (config.tuvanPhrases !== undefined) {
+    // Пустой список храним явно — иначе вернулись бы фразы по умолчанию.
+    setSetting(CHATBOT_SETTINGS.tuvanPhrases, config.tuvanPhrases.join('\n') || ' ');
+  }
+}
+
+function splitPhrases(raw: string): string[] {
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 200)
+    .map((line) => line.slice(0, 300));
 }
 
 /**
- * Тувинские фразы — только проверенные и только из этого списка. GigaChat
- * тувинского не знает и, если разрешить, сочиняет несуществующие слова,
- * поэтому модель пишет по-русски, а фразу мы подставляем сами.
+ * Тувинский бот берёт только из списка, который пишут люди в админке.
+ * GigaChat тувинского не знает и сочиняет несуществующие слова, поэтому
+ * модель пишет по-русски, а тувинское подставляем мы.
  */
-const TUVAN_PHRASES: { text: string; ru: string; at: 'start' | 'end' }[] = [
-  { text: 'Экии!', ru: 'привет', at: 'start' },
-  { text: 'Экии, эштер!', ru: 'привет, друзья', at: 'start' },
-  { text: 'Амыр-менди!', ru: 'здравствуйте', at: 'start' },
-  { text: 'Эки!', ru: 'хорошо', at: 'end' },
-  { text: 'Кайгамчык!', ru: 'чудесно', at: 'end' },
-  { text: 'Четтирдим!', ru: 'спасибо', at: 'end' },
-];
-
-/** Примерно каждое третье сообщение — с тувинской фразой. */
-const TUVAN_SHARE = 0.3;
+export const DEFAULT_TUVAN_PHRASES = ['Экии, эштер!', 'Амыр-менди!', 'Эки!', 'Кайгамчык!', 'Четтирдим!'];
 
 /** Буквы тувинского алфавита, которых нет в русском. */
 const TUVAN_LETTERS = /[үөңҮӨҢ]/;
 
-/**
- * Страховка: предложения с тувинскими буквами от модели выбрасываем,
- * затем с вероятностью TUVAN_SHARE добавляем фразу из списка.
- */
-function finishText(raw: string, options: { greetingsOnly?: boolean } = {}): string {
+/** Страховка: предложения с тувинскими буквами от модели выбрасываем. */
+function russianOnly(raw: string): string {
   const sentences = raw.match(/[^.!?…]+[.!?…]*\s*/g) ?? [raw];
-  const russian = sentences.filter((sentence) => !TUVAN_LETTERS.test(sentence)).join('').trim() || raw.trim();
-  if (Math.random() >= TUVAN_SHARE) return russian;
+  return sentences.filter((sentence) => !TUVAN_LETTERS.test(sentence)).join('').trim() || raw.trim();
+}
 
-  const pool = options.greetingsOnly ? TUVAN_PHRASES.filter((item) => item.at === 'start') : TUVAN_PHRASES;
-  const phrase = pool[Math.floor(Math.random() * pool.length)];
-  // Перевод не пишем — фраза звучит как живая речь, а не как разговорник.
-  return phrase.at === 'start' ? `${phrase.text} ${russian}` : `${russian} ${phrase.text}`;
+function randomTuvan(config: ChatbotConfig): string | null {
+  if (config.tuvanPhrases.length === 0) return null;
+  return config.tuvanPhrases[Math.floor(Math.random() * config.tuvanPhrases.length)];
+}
+
+/** Иногда дописываем к русскому ответу тувинскую фразу из списка. */
+function maybeWithTuvan(russian: string, config: ChatbotConfig): string {
+  if (Math.random() >= config.tuvanChance) return russian;
+  const phrase = randomTuvan(config);
+  return phrase ? `${russian} ${phrase}` : russian;
 }
 
 const PERSONA = [
-  'Ты — «Вайб Салон», бот парикмахерской ВАЙБ в Кызыле (Тыва). Ты сидишь в рабочем чате мастеров.',
-  'Характер: тёплый, весёлый, вдохновляющий, по-доброму шутишь про стрижки, клиентов и рабочий день.',
-  'Пиши коротко: 1–3 предложения, живым разговорным языком, можно 1–2 эмодзи. Без markdown, списков и хэштегов.',
-  'Не выдумывай факты о записях, клиентах и ценах. Не давай медицинских и финансовых советов.',
-  'Не спорь и не критикуй мастеров, не обсуждай политику и религию.',
+  'Ты — «Вайб Салон», бот в рабочем чате мастеров парикмахерской ВАЙБ в Кызыле.',
+  'Отвечай по делу и по контексту переписки, как толковый коллега: коротко, конкретно, 1–3 предложения.',
+  'Без сюсюканья, комплиментов, пафоса и обращений вроде «красавчики», «волшебники», «команда мечты».',
+  'Юмор — сухой и к месту, не в каждом сообщении. Эмодзи — максимум один и только если уместно.',
+  'Факты о салоне бери только из блока «Факты». Если нужных данных там нет — прямо скажи, что не знаешь.',
+  'Не выдумывай записи, клиентов и цены. Не обсуждай политику и религию. Без markdown и списков.',
   'Пиши только по-русски.',
 ].join(' ');
+
+function daySummary(date: string): string {
+  const rows = db
+    .prepare(
+      `SELECT master_id, COUNT(*) AS count FROM bookings
+       WHERE date = ? AND status IN ('confirmed', 'completed')
+       GROUP BY master_id`,
+    )
+    .all(date) as { master_id: string; count: number }[];
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+  if (total === 0) return 'записей нет';
+  return `${total} (${rows.map((row) => `${masterName(row.master_id)} — ${row.count}`).join(', ')})`;
+}
+
+/** Настоящие данные салона — чтобы на вопросы по делу бот отвечал цифрами, а не общими словами. */
+function salonFacts(): string {
+  const today = salonToday();
+  const tomorrow = addDays(today, 1);
+  const masters = activeMasters()
+    .map((master) => (master.role ? `${master.name} (${master.role})` : master.name))
+    .join(', ');
+  return [
+    `Факты. Сейчас ${formatDateHuman(today)}, ${minutesToTime(salonMinutesOfDay())} по времени Кызыла.`,
+    `Записей сегодня: ${daySummary(today)}. Завтра: ${daySummary(tomorrow)}.`,
+    `Мастера: ${masters}.`,
+    'Салон работает ежедневно 09:00–19:00, ТД «5 Звёзд», 1 этаж. Онлайн-запись: vibe-cut.ru и мини-приложение в MAX.',
+    `Скидка клиентам: ${BONUS_PER_VISIT}% за визит, до ${MAX_BONUS_PERCENT}%.`,
+  ].join(' ');
+}
 
 /** Короткая память разговора в каждом чате — чтобы бот отвечал в тему. */
 const HISTORY_LIMIT = 12;
@@ -172,41 +221,36 @@ export async function onGroupMessage(chatId: string, message: any): Promise<void
     const last = lastRandomReply.get(chatId) ?? 0;
     if (Date.now() - last < RANDOM_COOLDOWN_MS || Math.random() >= config.chance) return;
     lastRandomReply.set(chatId, Date.now());
+
+    // Иногда вместо реплики бот «переходит на тувинский» — шутка из списка, чтобы поднять настроение.
+    const tuvan = Math.random() < config.tuvanChance ? randomTuvan(config) : null;
+    if (tuvan) {
+      remember(chatId, { role: 'assistant', content: tuvan });
+      await sendToMaxChat(chatId, escapeHtml(tuvan), { replyTo: message.body?.mid });
+      return;
+    }
   }
 
   const task = addressed
-    ? 'К тебе обратились в чате — ответь на последнее сообщение по существу и по-дружески.'
-    : 'Тебя не звали, но ты решил поддержать разговор: коротко и по-доброму отреагируй на последнее сообщение — подбодри, похвали или пошути.';
+    ? 'К тебе обратились. Ответь на последнее обращённое к тебе сообщение по существу, с учётом переписки и фактов.'
+    : 'Тебя не звали. Вставь одну короткую уместную реплику по теме последнего сообщения — дельную или с лёгкой шуткой, без похвалы и пожеланий.';
 
   // Пока GigaChat думает, в чате видно «печатает…» — ответ ощущается мгновенным.
   if (addressed) void showTyping(chatId);
 
-  const reply = finishText(
-    await gigachatComplete([
-      { role: 'system', content: PERSONA },
-      ...(history.get(chatId) ?? []),
-      { role: 'user', content: task },
-    ]),
+  const reply = maybeWithTuvan(
+    russianOnly(
+      await gigachatComplete([
+        { role: 'system', content: `${PERSONA}\n${salonFacts()}` },
+        ...(history.get(chatId) ?? []),
+        { role: 'user', content: task },
+      ]),
+    ),
+    config,
   );
 
   remember(chatId, { role: 'assistant', content: reply });
   await sendToMaxChat(chatId, escapeHtml(reply), { replyTo: message.body?.mid });
-}
-
-/** Сводка дня для утреннего сообщения — только настоящие цифры из базы. */
-function todaySummary(): string {
-  const rows = db
-    .prepare(
-      `SELECT master_id, COUNT(*) AS count FROM bookings
-       WHERE date = ? AND status IN ('confirmed', 'completed')
-       GROUP BY master_id`,
-    )
-    .all(salonToday()) as { master_id: string; count: number }[];
-
-  const total = rows.reduce((sum, row) => sum + row.count, 0);
-  if (total === 0) return 'Записей на сегодня пока нет — день свободный, клиенты ещё запишутся.';
-  const perMaster = rows.map((row) => `${masterName(row.master_id)} — ${row.count}`).join(', ');
-  return `Записей на сегодня: ${total} (${perMaster}).`;
 }
 
 /**
@@ -214,20 +258,18 @@ function todaySummary(): string {
  * кнопке из админки в любое время. Возвращает текст, который отправили.
  */
 export async function postMorningMessage(): Promise<string> {
-  const text = finishText(
-    await gigachatComplete([
-      { role: 'system', content: PERSONA },
-      {
-        role: 'user',
-        content: [
-          `Сегодня ${formatDateHuman(salonToday())}, сейчас ${minutesToTime(salonMinutesOfDay())} по времени Кызыла. ${todaySummary()}`,
-          'Напиши мастерам вдохновляющее сообщение, уместное для этого времени суток: утром — пожелай хорошего дня, днём — подбодри, вечером — поблагодари за день.',
-          'Если есть записи — упомяни их число, как написано выше, ничего не добавляя.',
-        ].join(' '),
-      },
-    ]),
-    // Утром уместно только поздороваться.
-    { greetingsOnly: true },
+  const text = maybeWithTuvan(
+    russianOnly(
+      await gigachatComplete([
+        { role: 'system', content: `${PERSONA}\n${salonFacts()}` },
+        {
+          role: 'user',
+          content:
+            'Напиши в чат короткое сообщение, уместное для этого времени суток: сколько записей сегодня (по фактам, по мастерам) и одна бодрая фраза на день. Без пафоса.',
+        },
+      ]),
+    ),
+    chatbotConfig(),
   );
 
   const chats = enabledRecipients('max').filter((row) => row.kind === 'chat');

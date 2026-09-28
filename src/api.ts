@@ -208,7 +208,13 @@ export const api = {
 
     chatbot: () => request<ChatbotState>('/admin/chatbot'),
 
-    saveChatbot: (patch: Partial<Pick<ChatbotState, 'enabled' | 'morning' | 'chance'>> & { key?: string }) =>
+    saveChatbot: (
+      patch: Partial<Pick<ChatbotState, 'enabled' | 'morning' | 'chance' | 'tuvanChance'>> & {
+        key?: string;
+        /** Фразы по одной в строке. */
+        tuvanPhrases?: string;
+      },
+    ) =>
       request<ChatbotState>('/admin/chatbot', { method: 'PUT', body: JSON.stringify(patch) }),
 
     chatbotPost: () => request<{ text: string }>('/admin/chatbot/post', { method: 'POST' }),
@@ -270,6 +276,9 @@ export interface ChatbotState {
   morning: boolean;
   /** Вероятность, что бот сам ответит на обычное сообщение, 0..1. */
   chance: number;
+  /** Как часто бот вставляет тувинскую фразу или переходит на тувинский, 0..1. */
+  tuvanChance: number;
+  tuvanPhrases: string[];
   keyConfigured: boolean;
   keyFromEnv: boolean;
   /** Групповые чаты MAX, где бот разговаривает; botIsAdmin null — не удалось проверить. */
