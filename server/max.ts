@@ -47,11 +47,16 @@ async function maxRequest(
 export interface MaxBotInfo {
   name: string;
   username: string | null;
+  userId: string | null;
 }
 
 export async function botInfo(token?: string): Promise<MaxBotInfo> {
   const me = await maxRequest('GET', '/me', { token });
-  return { name: me.name ?? me.first_name ?? 'Бот', username: me.username ?? null };
+  return {
+    name: me.name ?? me.first_name ?? 'Бот',
+    username: me.username ?? null,
+    userId: me.user_id != null ? String(me.user_id) : null,
+  };
 }
 
 let cachedBot: { token: string; info: MaxBotInfo } | null = null;
@@ -183,10 +188,19 @@ export function verifyInitData(initData: string): MaxWebAppUser {
 }
 
 /** Сообщение в чат или диалог. Ошибки не роняют запись клиента. */
-export async function sendToMaxChat(chatId: string, html: string): Promise<boolean> {
+export async function sendToMaxChat(
+  chatId: string,
+  html: string,
+  options: { replyTo?: string } = {},
+): Promise<boolean> {
   try {
     await maxRequest('POST', `/messages?chat_id=${encodeURIComponent(chatId)}`, {
-      body: { text: html.slice(0, 4000), format: 'html' },
+      body: {
+        text: html.slice(0, 4000),
+        format: 'html',
+        // Ответ «цитатой» на конкретное сообщение в чате.
+        ...(options.replyTo ? { link: { type: 'reply', mid: options.replyTo } } : {}),
+      },
     });
     return true;
   } catch (error) {
@@ -229,6 +243,14 @@ async function registerPerson(chatId: string, user: any, reply: boolean): Promis
       ? `Здравствуйте, ${personName(user)}! Уведомления о новых записях включены.`
       : `Здравствуйте, ${personName(user)}! ${WAITING_TEXT}`,
   );
+}
+
+type GroupMessageHandler = (chatId: string, message: any) => Promise<void>;
+let groupMessageHandler: GroupMessageHandler | null = null;
+
+/** Кто разговаривает в групповых чатах — подключается при запуске (см. chatbot.ts). */
+export function onMaxGroupMessage(handler: GroupMessageHandler): void {
+  groupMessageHandler = handler;
 }
 
 async function greetClient(chatId: string, user: any): Promise<void> {
@@ -274,6 +296,11 @@ async function handleUpdate(update: any): Promise<void> {
         }
       } else {
         await registerChat(target, false);
+        if (groupMessageHandler) {
+          await groupMessageHandler(target, message).catch((error) =>
+            console.warn('[max] бот не ответил в чате:', (error as Error).message),
+          );
+        }
       }
       break;
     }

@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { attachSession } from './auth';
 import { env } from './env';
-import { maxToken, startMaxPolling } from './max';
+import { onGroupMessage } from './chatbot';
+import { maxToken, onMaxGroupMessage, startMaxPolling } from './max';
 import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { clientRouter } from './routes/client';
@@ -61,5 +62,6 @@ app.listen(env.port, () => {
   console.log(`[server] панель администратора: ${env.adminPassword ? 'доступна на /admin' : 'пароль не задан'}`);
   console.log(`[server] бот MAX: ${maxToken() ? 'включён' : 'токен не задан (указывается в админке)'}`);
   startScheduler();
+  onMaxGroupMessage(onGroupMessage);
   startMaxPolling();
 });

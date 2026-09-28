@@ -12,7 +12,7 @@ import {
   recordBonus,
   toAdminBookingView,
 } from '../bookings';
-import { db, type BonusTransactionRow, type BookingRow, type UserRow } from '../db';
+import { db, setSetting, type BonusTransactionRow, type BookingRow, type UserRow } from '../db';
 import { env } from '../env';
 import {
   MAX_PHOTO_BYTES,
@@ -22,6 +22,8 @@ import {
   saveMasterPhoto,
   setMasterVkId,
 } from '../masters';
+import { chatbotConfig, postMorningMessage, saveChatbotConfig } from '../chatbot';
+import { GIGACHAT_KEY_SETTING, GigaChatError, gigachatComplete, gigachatKey } from '../gigachat';
 import { MaxError, botInfo, maxToken, saveMaxToken } from '../max';
 import { notifyBookingCancelled, notifyBookingConfirmed, notifyVisitCompleted, sendStaffTest } from '../notify';
 import {
@@ -458,4 +460,53 @@ adminRouter.delete('/notifications/:id', async (req, res) => {
 
 adminRouter.post('/notifications/test', async (_req, res) => {
   res.json({ results: await sendStaffTest() });
+});
+
+// ─── Живой бот в рабочем чате MAX (GigaChat) ───
+
+function chatbotState() {
+  const key = gigachatKey();
+  return {
+    ...chatbotConfig(),
+    keyConfigured: Boolean(key),
+    keyFromEnv: Boolean(key && key === process.env.GIGACHAT_AUTH_KEY?.trim()),
+    chats: listRecipients()
+      .filter((row) => row.channel === 'max' && row.kind === 'chat' && row.enabled)
+      .map((row) => row.title),
+  };
+}
+
+adminRouter.get('/chatbot', (_req, res) => {
+  res.json(chatbotState());
+});
+
+adminRouter.put('/chatbot', async (req, res) => {
+  const body = req.body ?? {};
+  try {
+    // Новый ключ сначала проверяем настоящим запросом — неверный не сохраняем.
+    if (typeof body.key === 'string') {
+      const key = body.key.trim();
+      if (key) await gigachatComplete([{ role: 'user', content: 'Ответь одним словом: ок' }], { key });
+      setSetting(GIGACHAT_KEY_SETTING, key || null);
+    }
+    saveChatbotConfig({
+      enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+      morning: typeof body.morning === 'boolean' ? body.morning : undefined,
+      chance: typeof body.chance === 'number' ? body.chance : undefined,
+    });
+    res.json(chatbotState());
+  } catch (error) {
+    const message = error instanceof GigaChatError ? error.message : 'GigaChat недоступен';
+    console.warn('[admin] ключ GigaChat не принят:', (error as Error).message);
+    res.status(400).json({ error: `Ключ не подошёл: ${message}` });
+  }
+});
+
+/** «Написать в группу сейчас» — то же, что утреннее сообщение, но по кнопке. */
+adminRouter.post('/chatbot/post', async (_req, res) => {
+  try {
+    res.json({ text: await postMorningMessage() });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
 });

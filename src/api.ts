@@ -192,6 +192,13 @@ export const api = {
     removeRecipient: (id: number) =>
       request<NotificationsState>(`/admin/notifications/${id}`, { method: 'DELETE' }),
 
+    chatbot: () => request<ChatbotState>('/admin/chatbot'),
+
+    saveChatbot: (patch: Partial<Pick<ChatbotState, 'enabled' | 'morning' | 'chance'>> & { key?: string }) =>
+      request<ChatbotState>('/admin/chatbot', { method: 'PUT', body: JSON.stringify(patch) }),
+
+    chatbotPost: () => request<{ text: string }>('/admin/chatbot/post', { method: 'POST' }),
+
     testNotifications: () =>
       request<{ results: { channel: 'vk' | 'max'; target: string; title: string; ok: boolean }[] }>(
         '/admin/notifications/test',
@@ -242,4 +249,15 @@ export interface NotificationsState {
   recipients: NotifyRecipient[];
   /** Вошедшие на сайт через ВК, которых ещё нет среди получателей. */
   candidates: { vkId: string; name: string }[];
+}
+
+export interface ChatbotState {
+  enabled: boolean;
+  morning: boolean;
+  /** Вероятность, что бот сам ответит на обычное сообщение, 0..1. */
+  chance: number;
+  keyConfigured: boolean;
+  keyFromEnv: boolean;
+  /** Групповые чаты MAX, где бот разговаривает. */
+  chats: string[];
 }

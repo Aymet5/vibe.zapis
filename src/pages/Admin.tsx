@@ -1,8 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, CheckCircle2, LogOut, Search, Send, Trash2, Upload, Users, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, LogOut, Search, Send, Sparkles, Trash2, Upload, Users, XCircle } from 'lucide-react';
 import { BONUS_PER_VISIT, applyDiscount } from '../../shared/catalog';
 import type { AdminBookingView, BonusTransactionView } from '../../shared/types';
-import { api, type AdminClient, type AdminMaster, type NotificationsState, type NotifyRecipient } from '../api';
+import {
+  api,
+  type AdminClient,
+  type AdminMaster,
+  type ChatbotState,
+  type NotificationsState,
+  type NotifyRecipient,
+} from '../api';
 import { DateStrip } from '../components/DateStrip';
 import { Button, ErrorNote, Spinner, StatusBadge, inputClass } from '../components/ui';
 import { formatDate, formatDateFull, formatTimestamp } from '../lib/format';
@@ -948,6 +955,8 @@ function NotificationsTab() {
         )}
       </section>
 
+      <ChatbotSection />
+
       <section className="rounded-2xl border border-border bg-surface p-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="flex items-center gap-2 font-bold">
@@ -1023,5 +1032,157 @@ function RecipientList({
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── Живой бот в рабочем чате ───
+
+const CHANCE_OPTIONS = [
+  { value: 0, label: 'Только когда зовут' },
+  { value: 0.07, label: 'Редко' },
+  { value: 0.15, label: 'Иногда' },
+  { value: 0.3, label: 'Часто' },
+];
+
+function ChatbotSection() {
+  const [state, setState] = useState<ChatbotState | null>(null);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [posted, setPosted] = useState('');
+
+  useEffect(() => {
+    api.admin
+      .chatbot()
+      .then(setState)
+      .catch((err) => setError((err as Error).message));
+  }, []);
+
+  const save = async (patch: Parameters<typeof api.admin.saveChatbot>[0]) => {
+    setBusy(true);
+    setError('');
+    try {
+      setState(await api.admin.saveChatbot(patch));
+      if (patch.key !== undefined) setKey('');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const postNow = async () => {
+    setBusy(true);
+    setError('');
+    setPosted('');
+    try {
+      setPosted((await api.admin.chatbotPost()).text);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!state) return error ? <ErrorNote>{error}</ErrorNote> : null;
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-orange-500" /> Бот в рабочем чате
+        </h2>
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={state.enabled}
+            disabled={busy || !state.keyConfigured}
+            onChange={() => void save({ enabled: !state.enabled })}
+            className="w-5 h-5 accent-orange-500"
+          />
+          {state.enabled ? 'Разговаривает' : 'Молчит'}
+        </label>
+      </div>
+
+      <p className="text-sm text-text-muted">
+        «Вайб Салон» отвечает, когда его зовут словом «бот» или ответом на его сообщение, иногда сам подбадривает
+        мастеров и по утрам (8:30–9:30) желает хорошего дня с числом записей на сегодня. Примерно каждое третье
+        сообщение — с тувинской фразой. Тексты пишет GigaChat.
+        {state.chats.length > 0
+          ? ` Чаты: ${state.chats.join(', ')}.`
+          : ' Сначала включите групповой чат MAX в разделе выше.'}
+      </p>
+
+      {error && <ErrorNote>{error}</ErrorNote>}
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-text-muted">Ключ авторизации GigaChat</label>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="password"
+            autoComplete="off"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            placeholder={state.keyConfigured ? 'Ключ сохранён — введите новый, чтобы заменить' : 'Вставьте ключ'}
+            className={`${inputClass} sm:max-w-md`}
+          />
+          <Button onClick={() => void save({ key })} disabled={!key.trim()} loading={busy}>
+            Сохранить
+          </Button>
+        </div>
+        <p className="text-xs text-text-muted">
+          developers.sber.ru → проект GigaChat API → «Ключ авторизации». Перед сохранением проверяем его запросом к
+          GigaChat.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-text-muted">Как часто бот сам вступает в разговор</p>
+        <div className="flex flex-wrap gap-2">
+          {CHANCE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={busy}
+              onClick={() => void save({ chance: option.value })}
+              className={`rounded-full border px-4 py-2 text-sm font-medium ${
+                Math.abs(state.chance - option.value) < 0.001
+                  ? 'border-orange-500 bg-orange-500 text-white'
+                  : 'border-border bg-bg-main text-text-muted hover:text-text-main'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-text-muted">Не чаще раза в 20 минут в одном чате, даже если выбрано «Часто».</p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={state.morning}
+            disabled={busy}
+            onChange={() => void save({ morning: !state.morning })}
+            className="w-5 h-5 accent-orange-500"
+          />
+          Утреннее сообщение перед открытием
+        </label>
+        <Button
+          variant="ghost"
+          onClick={() => void postNow()}
+          disabled={busy || !state.keyConfigured || state.chats.length === 0}
+        >
+          <Send className="w-4 h-4" /> Написать в группу сейчас
+        </Button>
+      </div>
+
+      {posted && (
+        <p className="rounded-xl border border-border bg-bg-main px-4 py-3 text-sm">
+          Отправлено: {posted}
+        </p>
+      )}
+    </section>
   );
 }
