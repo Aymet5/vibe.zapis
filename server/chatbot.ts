@@ -74,8 +74,8 @@ function finishText(raw: string, options: { greetingsOnly?: boolean } = {}): str
 
   const pool = options.greetingsOnly ? TUVAN_PHRASES.filter((item) => item.at === 'start') : TUVAN_PHRASES;
   const phrase = pool[Math.floor(Math.random() * pool.length)];
-  const tuvan = `${phrase.text} (${phrase.ru})`;
-  return phrase.at === 'start' ? `${tuvan} ${russian}` : `${russian} ${tuvan}`;
+  // Перевод не пишем — фраза звучит как живая речь, а не как разговорник.
+  return phrase.at === 'start' ? `${phrase.text} ${russian}` : `${russian} ${phrase.text}`;
 }
 
 const PERSONA = [
