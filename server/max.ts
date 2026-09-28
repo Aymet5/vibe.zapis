@@ -93,6 +93,15 @@ export async function saveMaxToken(rawToken: string): Promise<MaxBotInfo | null>
   return info;
 }
 
+/** «Печатает…» в чате, пока готовится ответ. Не критично, если не сработает. */
+export async function showTyping(chatId: string): Promise<void> {
+  try {
+    await maxRequest('POST', `/chats/${encodeURIComponent(chatId)}/actions`, { body: { action: 'typing_on' } });
+  } catch {
+    // Индикатор — украшение, без него ответ всё равно придёт.
+  }
+}
+
 export interface MaxLinkButton {
   label: string;
   link: string;

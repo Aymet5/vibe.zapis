@@ -1,7 +1,7 @@
 import { findMaster, minutesToTime } from '../shared/catalog';
 import { db, getSetting, setSetting } from './db';
 import { GigaChatError, gigachatComplete, gigachatKey, type ChatMessage } from './gigachat';
-import { botInfo, maxToken, sendToMaxChat } from './max';
+import { botInfo, maxToken, sendToMaxChat, showTyping } from './max';
 import { enabledRecipients } from './recipients';
 import { formatDateHuman, salonMinutesOfDay, salonToday } from './time';
 
@@ -113,16 +113,44 @@ function isStaffChat(chatId: string): boolean {
   return enabledRecipients('max').some((row) => row.kind === 'chat' && row.target === chatId);
 }
 
-let botIdentity: { token: string; userId: string | null; username: string | null } | null = null;
+interface BotIdentity {
+  userId: string | null;
+  username: string | null;
+  name: string | null;
+}
 
-async function identity(): Promise<{ userId: string | null; username: string | null }> {
+let botIdentity: (BotIdentity & { token: string }) | null = null;
+
+async function identity(): Promise<BotIdentity> {
   const token = maxToken();
-  if (!token) return { userId: null, username: null };
+  if (!token) return { userId: null, username: null, name: null };
   if (botIdentity?.token !== token) {
     const info = await botInfo(token);
-    botIdentity = { token, userId: info.userId, username: info.username };
+    botIdentity = { token, userId: info.userId, username: info.username, name: info.name };
   }
   return botIdentity;
+}
+
+/**
+ * Обратились ли к боту. Упоминание через @ MAX присылает разметкой
+ * (markup: user_mention с user_id), а в тексте остаётся имя «Вайб Салон».
+ */
+function isAddressed(message: any, text: string, me: BotIdentity): boolean {
+  const lower = text.toLowerCase();
+
+  const repliedToBot =
+    message.link?.type === 'reply' && me.userId !== null && String(message.link?.sender?.user_id) === me.userId;
+  const markupMention = (Array.isArray(message.body?.markup) ? message.body.markup : []).some(
+    (item: any) =>
+      item?.type === 'user_mention' &&
+      ((me.userId !== null && String(item.user_id) === me.userId) ||
+        (me.username !== null && String(item.user_link ?? '').toLowerCase() === `@${me.username.toLowerCase()}`)),
+  );
+  const usernameMention = me.username !== null && lower.includes(`@${me.username.toLowerCase()}`);
+  const nameMention = me.name !== null && lower.includes(me.name.toLowerCase());
+  const botWord = /(^|[^а-яё])бот([^а-яё]|$)/i.test(text);
+
+  return repliedToBot || markupMention || usernameMention || nameMention || botWord;
 }
 
 /** Сообщение из группового чата MAX. Ошибки не мешают остальной работе бота. */
@@ -136,12 +164,8 @@ export async function onGroupMessage(chatId: string, message: any): Promise<void
   const me = await identity();
   remember(chatId, { role: 'user', content: `${senderName(message.sender)}: ${text}` });
 
-  const repliedToBot =
-    message.link?.type === 'reply' && me.userId !== null && String(message.link?.sender?.user_id) === me.userId;
-  const mentioned =
-    (me.username !== null && text.toLowerCase().includes(`@${me.username.toLowerCase()}`)) ||
-    /(^|[^а-яё])бот([^а-яё]|$)/i.test(text);
-  const addressed = repliedToBot || mentioned;
+  const addressed = isAddressed(message, text, me);
+  console.info(`[chatbot] сообщение в чате ${chatId}: ${addressed ? 'обращаются к боту' : 'обычное'}`);
 
   if (!addressed) {
     const last = lastRandomReply.get(chatId) ?? 0;
@@ -152,6 +176,9 @@ export async function onGroupMessage(chatId: string, message: any): Promise<void
   const task = addressed
     ? 'К тебе обратились в чате — ответь на последнее сообщение по существу и по-дружески.'
     : 'Тебя не звали, но ты решил поддержать разговор: коротко и по-доброму отреагируй на последнее сообщение — подбодри, похвали или пошути.';
+
+  // Пока GigaChat думает, в чате видно «печатает…» — ответ ощущается мгновенным.
+  if (addressed) void showTyping(chatId);
 
   const reply = finishText(
     await gigachatComplete([
