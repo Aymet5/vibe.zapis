@@ -17,6 +17,7 @@ import { useSession } from '../lib/session';
 import { DateStrip } from './DateStrip';
 import { SlotGrid } from './SlotGrid';
 import { VkLoginButton } from './VkLoginButton';
+import { isMaxApp } from '../lib/maxApp';
 import { Button, ErrorNote, Field, SectionHeading, inputClass } from './ui';
 
 export interface BookingPreset {
@@ -201,15 +202,24 @@ export function BookingForm({ today, preset, onBooked }: BookingFormProps) {
                 </motion.div>
                 <h3 className="text-3xl font-black tracking-tighter mb-2">ВЫ УСПЕШНО ЗАПИСАНЫ</h3>
                 <p className="text-text-muted max-w-sm">
-                  {user && config?.vkBotEnabled
-                    ? 'Подтверждение отправили вам в личные сообщения ВКонтакте. Там же напомним о визите.'
-                    : 'Мы свяжемся с вами для подтверждения. До встречи в ВАЙБ!'}
+                  {user?.messenger === 'max'
+                    ? 'Подтверждение отправили вам в MAX. Там же напомним о визите.'
+                    : user && config?.vkBotEnabled
+                      ? 'Подтверждение отправили вам в личные сообщения ВКонтакте. Там же напомним о визите.'
+                      : 'До встречи в ВАЙБ!'}
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {!user ? (
+          {!user && isMaxApp() ? (
+            <div className="text-center space-y-3 py-4">
+              <h3 className="text-2xl font-black tracking-tighter">НЕ УДАЛОСЬ ВОЙТИ ИЗ MAX</h3>
+              <p className="text-text-muted max-w-md mx-auto">
+                Закройте приложение и откройте его заново из чата с ботом ВАЙБ.
+              </p>
+            </div>
+          ) : !user ? (
             <div className="text-center space-y-5 py-4">
               <h3 className="text-2xl font-black tracking-tighter">СНАЧАЛА ВОЙДИТЕ ЧЕРЕЗ ВК</h3>
               <p className="text-text-muted max-w-md mx-auto">

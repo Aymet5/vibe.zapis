@@ -2,6 +2,7 @@ import React from 'react';
 import { LogOut, Moon, Phone, Sun, User } from 'lucide-react';
 import { useSession } from '../lib/session';
 import { VkLoginButton } from './VkLoginButton';
+import { isMaxApp } from '../lib/maxApp';
 
 interface HeaderProps {
   isDark: boolean;
@@ -70,7 +71,7 @@ export function Header({ isDark, onToggleTheme, onNavigate, onBook, path }: Head
               </button>
             </>
           ) : (
-            <VkLoginButton compact />
+            !isMaxApp() && <VkLoginButton compact />
           )}
 
           <button

@@ -4,6 +4,7 @@ import { AlertCircle, X } from 'lucide-react';
 import { Footer } from './components/Footer';
 import { Header } from './components/Header';
 import { Spinner } from './components/ui';
+import { isMaxApp, maxStartParam, signalMaxReady } from './lib/maxApp';
 import { queryParam, stripQuery, useRoute } from './lib/router';
 import { SessionProvider, useSession, useTheme } from './lib/session';
 import { Admin } from './pages/Admin';
@@ -19,7 +20,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { config, loading } = useSession();
+  const { config, loading, user } = useSession();
   const { isDark, toggle } = useTheme();
   const { path, navigate } = useRoute();
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -31,6 +32,38 @@ function Shell() {
     }
     if (queryParam('login')) stripQuery();
   }, []);
+
+  useEffect(() => {
+    signalMaxReady();
+  }, []);
+
+  // Ссылка из бота MAX (?startapp=move-12 / profile / book) — открываем нужное место.
+  // Один раз за запуск: иначе при каждом обновлении страницы кидало бы обратно.
+  useEffect(() => {
+    if (loading || !isMaxApp()) return;
+    const start = maxStartParam();
+    if (!start) return;
+    try {
+      if (sessionStorage.getItem('vibe:max-start-done') === start) return;
+      sessionStorage.setItem('vibe:max-start-done', start);
+    } catch {
+      // Без хранилища просто выполняем переход.
+    }
+    const move = /^move-(\d+)$/.exec(start);
+    if (move) {
+      try {
+        sessionStorage.setItem('vibe:move-booking', move[1]);
+      } catch {
+        // Кабинет откроется, запись клиент выберет сам.
+      }
+      navigate('/profile');
+    } else if (start === 'profile') {
+      navigate('/profile');
+    } else if (start === 'book') {
+      setTimeout(() => goToBooking(), 300);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user]);
 
   const goToBooking = () => {
     if (path !== '/') {

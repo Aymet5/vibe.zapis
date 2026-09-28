@@ -17,6 +17,7 @@ export function toPublicUser(user: UserRow): PublicUser {
     phone: user.phone,
     bonusPercent: user.bonus_percent,
     vkMessagesAllowed: Boolean(user.vk_messages_allowed),
+    messenger: user.vk_id ? 'vk' : user.max_id ? 'max' : null,
     visitsCount: visits.count,
     masterId: master?.id ?? null,
     masterName: master?.name ?? null,

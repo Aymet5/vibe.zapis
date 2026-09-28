@@ -155,9 +155,9 @@ function validateSlot(date: string, time: string, durationMinutes: number): numb
 }
 
 function validate(input: CreateBookingInput): ValidatedBooking {
-  // Записываться могут только вошедшие через ВК: так у каждой записи есть
+  // Записываться могут только вошедшие через ВК или MAX: так у каждой записи есть
   // подтверждённый профиль, копится скидка и бот может написать клиенту.
-  if (!input.user) throw new BookingError('Записаться можно только после входа через ВКонтакте', 401);
+  if (!input.user) throw new BookingError('Записаться можно только после входа через ВКонтакте или MAX', 401);
 
   if (!isCategoryId(input.category)) throw new BookingError('Неизвестная категория услуг');
 

@@ -115,6 +115,7 @@ db.exec(`
 export interface UserRow {
   id: number;
   vk_id: string | null;
+  max_id: string | null;
   first_name: string;
   last_name: string;
   photo: string | null;
@@ -151,6 +152,13 @@ export interface MasterProfileRow {
   photo: string | null;
   updated_at: string;
 }
+
+// Клиенты, вошедшие из мини-приложения MAX, опознаются по id пользователя MAX.
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+if (!userColumns.some((column) => column.name === 'max_id')) {
+  db.exec('ALTER TABLE users ADD COLUMN max_id TEXT');
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_max ON users (max_id) WHERE max_id IS NOT NULL');
 
 // Раньше каждая запись ждала ручного подтверждения. Теперь свободное окошко
 // подтверждает её сразу, поэтому оставшиеся «ожидающие» переводим в подтверждённые.

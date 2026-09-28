@@ -108,6 +108,10 @@ export const api = {
 
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
 
+  /** Вход из мини-приложения MAX по подписанным данным запуска. */
+  maxLogin: (initData: string) =>
+    request<{ user: PublicUser }>('/auth/max', { method: 'POST', body: JSON.stringify({ initData }) }),
+
   admin: {
     session: () => request<{ authenticated: boolean; enabled: boolean }>('/admin/session'),
 

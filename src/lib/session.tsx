@@ -1,6 +1,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PublicUser } from '../../shared/types';
 import { api, type AppConfig } from '../api';
+import { formatPhone } from './format';
+import { maxInitData, requestMaxPhone } from './maxApp';
+
+const PHONE_ASKED_KEY = 'vibe:max-phone-asked';
+
+/** Номер спрашиваем один раз за запуск: отказ клиента уважаем. */
+function phoneAlreadyAsked(): boolean {
+  try {
+    if (sessionStorage.getItem(PHONE_ASKED_KEY)) return true;
+    sessionStorage.setItem(PHONE_ASKED_KEY, '1');
+  } catch {
+    // Без хранилища спросим ещё раз при следующем запуске — не страшно.
+  }
+  return false;
+}
 
 interface SessionValue {
   config: AppConfig | null;
@@ -22,6 +37,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       const next = await api.config();
       setConfig(next);
+
+      // В мини-приложении MAX входим сами — клиенту ничего нажимать не нужно.
+      const initData = maxInitData();
+      if (!next.user && initData) {
+        try {
+          next.user = (await api.maxLogin(initData)).user;
+        } catch (error) {
+          console.error('Не удалось войти из MAX', error);
+        }
+      }
       setUser(next.user);
     } catch (error) {
       console.error('Не удалось получить настройки приложения', error);
@@ -33,6 +58,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Телефон для связи подтягиваем из MAX родным окном «Поделиться номером».
+  useEffect(() => {
+    if (!user || user.phone || user.messenger !== 'max' || phoneAlreadyAsked()) return;
+    void (async () => {
+      const phone = await requestMaxPhone();
+      if (!phone) return;
+      try {
+        setUser((await api.savePhone(formatPhone(phone))).user);
+      } catch (error) {
+        console.error('Не удалось сохранить телефон из MAX', error);
+      }
+    })();
+  }, [user]);
 
   const logout = useCallback(async () => {
     await api.logout();

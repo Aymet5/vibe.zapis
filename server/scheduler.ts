@@ -36,7 +36,7 @@ async function sendDueReminders(): Promise<void> {
     db.prepare(`UPDATE bookings SET reminder_sent_at = datetime('now') WHERE id = ?`).run(booking.id);
 
     if (!delivered) {
-      console.info(`[reminder] запись #${booking.id}: сообщение в ВК не доставлено`);
+      console.info(`[reminder] запись #${booking.id}: сообщение клиенту не доставлено`);
     }
   }
 }

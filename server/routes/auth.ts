@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { loginClient, logoutClient } from '../auth';
 import { db, type UserRow } from '../db';
 import { env } from '../env';
+import { MaxError, verifyInitData } from '../max';
+import { toPublicUser } from '../views';
 import { VkError, buildAuthorizeUrl, exchangeCode, isMessagingAllowed } from '../vk';
 
 export const authRouter = Router();
@@ -73,6 +75,44 @@ authRouter.get('/vk/callback', async (req, res) => {
     const message = error instanceof VkError ? error.message : 'Не удалось войти через ВК';
     console.error('[auth] ошибка входа через ВК:', error);
     res.redirect(`/?login=error&reason=${encodeURIComponent(message)}`);
+  }
+});
+
+/**
+ * Вход из мини-приложения MAX: без кнопок и паролей, по подписанным данным
+ * запуска. Клиент опознаётся по id MAX, телефон приложение попросит отдельно.
+ */
+authRouter.post('/max', (req, res) => {
+  try {
+    const profile = verifyInitData(String(req.body?.initData ?? ''));
+    const existing = db.prepare('SELECT * FROM users WHERE max_id = ?').get(profile.maxId) as UserRow | undefined;
+
+    let userId: number;
+    if (existing) {
+      db.prepare('UPDATE users SET first_name = ?, last_name = ?, photo = COALESCE(?, photo) WHERE id = ?').run(
+        profile.firstName,
+        profile.lastName,
+        profile.photo,
+        existing.id,
+      );
+      userId = existing.id;
+    } else {
+      const result = db
+        .prepare('INSERT INTO users (max_id, first_name, last_name, photo) VALUES (?, ?, ?, ?)')
+        .run(profile.maxId, profile.firstName, profile.lastName, profile.photo);
+      userId = Number(result.lastInsertRowid);
+    }
+
+    loginClient(res, userId);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
+    res.json({ user: toPublicUser(user) });
+  } catch (error) {
+    if (error instanceof MaxError) {
+      res.status(401).json({ error: error.message });
+      return;
+    }
+    console.error('[auth] ошибка входа из MAX:', error);
+    res.status(500).json({ error: 'Не удалось войти из MAX' });
   }
 });
 

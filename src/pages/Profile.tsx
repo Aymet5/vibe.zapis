@@ -197,7 +197,7 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
         </section>
 
         {/* Уведомления в ВК */}
-        {config?.vkBotEnabled && !user.vkMessagesAllowed && config.communityChatUrl && (
+        {user.messenger === 'vk' && config?.vkBotEnabled && !user.vkMessagesAllowed && config.communityChatUrl && (
           <section className="rounded-3xl border border-border bg-surface p-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
             <div className="flex items-start gap-3">
               <Bell className="w-5 h-5 text-orange-500 shrink-0 mt-1" />
