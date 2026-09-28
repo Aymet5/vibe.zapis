@@ -208,7 +208,7 @@ export async function notifyNewBooking(booking: BookingRow): Promise<void> {
   const user = bookingUser(booking);
 
   const adminText = [
-    '🔥 <b>Новая запись</b>',
+    `🔥 <b>Новая запись — мастер ${masterName(booking)}</b>`,
     '',
     `👤 <b>Клиент:</b> ${escapeHtml(booking.client_name)}${
       user?.vk_id ? ` (vk.com/id${user.vk_id})` : user?.max_id ? ' (MAX)' : ' (гость)'
@@ -216,7 +216,6 @@ export async function notifyNewBooking(booking: BookingRow): Promise<void> {
     `📞 <b>Телефон:</b> ${escapeHtml(booking.client_phone)}`,
     `📅 <b>Когда:</b> ${slotLine(booking)}`,
     `✂️ <b>Услуга:</b> ${categoryLabel(booking)} — ${booking.service}`,
-    `💈 <b>Мастер:</b> ${masterName(booking)}`,
     `💰 <b>${priceLine(booking)}</b>`,
   ].join('\n');
 
@@ -275,11 +274,11 @@ export async function notifyBookingCancelled(booking: BookingRow, byClient: bool
   }
 
   const adminText = [
-    '❌ <b>Запись отменена</b>',
+    `❌ <b>Запись отменена — мастер ${masterName(booking)}</b>`,
     '',
     `👤 ${escapeHtml(booking.client_name)} — ${escapeHtml(booking.client_phone)}`,
     `📅 ${slotLine(booking)}`,
-    `✂️ ${booking.service} у ${masterName(booking)}`,
+    `✂️ ${booking.service}`,
     byClient ? '<i>Отменил клиент</i>' : '<i>Отменил администратор</i>',
   ].join('\n');
 
@@ -292,12 +291,12 @@ export async function notifyBookingRescheduled(
   previous: Pick<BookingRow, 'date' | 'start_minutes' | 'duration_minutes'>,
 ): Promise<void> {
   const adminText = [
-    '🔁 <b>Перенос записи</b>',
+    `🔁 <b>Перенос записи — мастер ${masterName(booking)}</b>`,
     '',
     `👤 <b>Клиент:</b> ${escapeHtml(booking.client_name)} — ${escapeHtml(booking.client_phone)}`,
     `Было: <s>${slotLine(previous)}</s>`,
     `📅 <b>Стало:</b> ${slotLine(booking)}`,
-    `✂️ ${booking.service} у ${masterName(booking)}`,
+    `✂️ ${booking.service}`,
   ].join('\n');
 
   await Promise.all([
