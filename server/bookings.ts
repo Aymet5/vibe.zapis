@@ -59,22 +59,28 @@ export function toAdminBookingView(row: BookingRow & { vk_id?: string | null; us
   };
 }
 
-function blockingBookings(date: string, masterId: string): BookingRow[] {
+/** exceptId — запись, которую переносят: своё же время ей не мешает. */
+function blockingBookings(date: string, masterId: string, exceptId?: number): BookingRow[] {
   const placeholders = BLOCKING_STATUSES.map(() => '?').join(', ');
   return db
     .prepare(
       `SELECT * FROM bookings
-       WHERE date = ? AND master_id = ? AND status IN (${placeholders})`,
+       WHERE date = ? AND master_id = ? AND status IN (${placeholders}) AND id <> ?`,
     )
-    .all(date, masterId, ...BLOCKING_STATUSES) as BookingRow[];
+    .all(date, masterId, ...BLOCKING_STATUSES, exceptId ?? 0) as BookingRow[];
 }
 
 /**
  * Сетка окошек на день. Занятые интервалы других услуг тоже перекрывают слот —
  * окрашивание на два часа закрывает четыре подряд идущих окошка.
  */
-export function getAvailability(date: string, masterId: string, durationMinutes: number): AvailabilityResponse {
-  const busy = blockingBookings(date, masterId);
+export function getAvailability(
+  date: string,
+  masterId: string,
+  durationMinutes: number,
+  exceptId?: number,
+): AvailabilityResponse {
+  const busy = blockingBookings(date, masterId, exceptId);
   const today = salonToday();
   const nowMinutes = salonMinutesOfDay();
 
@@ -125,6 +131,29 @@ interface ValidatedBooking {
   finalPrice: number | null;
 }
 
+/** Дата и время по правилам салона. Возвращает начало в минутах от полуночи. */
+function validateSlot(date: string, time: string, durationMinutes: number): number {
+  if (!isValidDate(date)) throw new BookingError('Некорректная дата');
+  const today = salonToday();
+  if (date < today) throw new BookingError('Нельзя записаться на прошедшую дату');
+  if (date > addDays(today, SCHEDULE.bookingHorizonDays)) {
+    throw new BookingError(`Запись открыта максимум на ${SCHEDULE.bookingHorizonDays} дней вперёд`);
+  }
+
+  const startMinutes = timeToMinutes(time);
+  if (Number.isNaN(startMinutes)) throw new BookingError('Некорректное время');
+  if (startMinutes % SCHEDULE.stepMinutes !== 0 || startMinutes < SCHEDULE.openMinutes) {
+    throw new BookingError('Выберите время из сетки свободных окошек');
+  }
+  if (startMinutes + durationMinutes > SCHEDULE.closeMinutes) {
+    throw new BookingError('Услуга не успеет закончиться до закрытия салона');
+  }
+  if (date === today && startMinutes <= salonMinutesOfDay()) {
+    throw new BookingError('Это время уже прошло, выберите другое окошко');
+  }
+  return startMinutes;
+}
+
 function validate(input: CreateBookingInput): ValidatedBooking {
   // Записываться могут только вошедшие через ВК: так у каждой записи есть
   // подтверждённый профиль, копится скидка и бот может написать клиенту.
@@ -141,24 +170,7 @@ function validate(input: CreateBookingInput): ValidatedBooking {
     throw new BookingError(`${master.name} не оказывает услуги этой категории`);
   }
 
-  if (!isValidDate(input.date)) throw new BookingError('Некорректная дата');
-  const today = salonToday();
-  if (input.date < today) throw new BookingError('Нельзя записаться на прошедшую дату');
-  if (input.date > addDays(today, SCHEDULE.bookingHorizonDays)) {
-    throw new BookingError(`Запись открыта максимум на ${SCHEDULE.bookingHorizonDays} дней вперёд`);
-  }
-
-  const startMinutes = timeToMinutes(input.time);
-  if (Number.isNaN(startMinutes)) throw new BookingError('Некорректное время');
-  if (startMinutes % SCHEDULE.stepMinutes !== 0 || startMinutes < SCHEDULE.openMinutes) {
-    throw new BookingError('Выберите время из сетки свободных окошек');
-  }
-  if (startMinutes + service.duration > SCHEDULE.closeMinutes) {
-    throw new BookingError('Услуга не успеет закончиться до закрытия салона');
-  }
-  if (input.date === today && startMinutes <= salonMinutesOfDay()) {
-    throw new BookingError('Это время уже прошло, выберите другое окошко');
-  }
+  const startMinutes = validateSlot(input.date, input.time, service.duration);
 
   const clientName = input.clientName.trim();
   if (clientName.length < 2) throw new BookingError('Укажите имя');
@@ -293,6 +305,40 @@ export const cancelBooking = db.transaction((id: number, reason: string): Bookin
 
   db.prepare(`UPDATE bookings SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`).run(id);
   releaseHold(booking, reason);
+  return getBooking(id)!;
+});
+
+/**
+ * Перенос на другое время у того же мастера. Запись снова ждёт подтверждения
+ * салона, а напоминание уйдёт заново уже под новое время.
+ */
+export const rescheduleBooking = db.transaction((id: number, date: string, time: string): BookingRow => {
+  const booking = getBooking(id);
+  if (!booking) throw new BookingError('Запись не найдена', 404);
+  if (booking.status !== 'pending' && booking.status !== 'confirmed') {
+    throw new BookingError('Перенести можно только активную запись');
+  }
+
+  const startMinutes = validateSlot(date, time, booking.duration_minutes);
+  if (date === booking.date && startMinutes === booking.start_minutes) {
+    throw new BookingError('Запись уже стоит на это время');
+  }
+
+  const conflict = blockingBookings(date, booking.master_id, booking.id).some((other) =>
+    intervalsOverlap(
+      startMinutes,
+      startMinutes + booking.duration_minutes,
+      other.start_minutes,
+      other.start_minutes + other.duration_minutes,
+    ),
+  );
+  if (conflict) throw new BookingError('Это окошко только что заняли, выберите другое', 409);
+
+  db.prepare(
+    `UPDATE bookings
+     SET date = ?, start_minutes = ?, status = 'pending', reminder_sent_at = NULL, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(date, startMinutes, id);
   return getBooking(id)!;
 });
 

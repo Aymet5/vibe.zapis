@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, LogOut, Search, Upload, Users, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, LogOut, Search, Send, Trash2, Upload, Users, XCircle } from 'lucide-react';
 import { BONUS_PER_VISIT, applyDiscount } from '../../shared/catalog';
 import type { AdminBookingView, BonusTransactionView } from '../../shared/types';
-import { api, type AdminClient, type AdminMaster } from '../api';
+import { api, type AdminClient, type AdminMaster, type NotificationsState, type NotifyRecipient } from '../api';
 import { DateStrip } from '../components/DateStrip';
 import { Button, ErrorNote, Spinner, StatusBadge, inputClass } from '../components/ui';
 import { formatDate, formatDateFull, formatTimestamp } from '../lib/format';
 
-type Tab = 'day' | 'pending' | 'upcoming' | 'clients' | 'masters';
+type Tab = 'day' | 'pending' | 'upcoming' | 'clients' | 'masters' | 'notifications';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'pending', label: 'Ждут подтверждения' },
@@ -15,6 +15,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'upcoming', label: 'Все предстоящие' },
   { id: 'clients', label: 'Клиенты' },
   { id: 'masters', label: 'Мастера' },
+  { id: 'notifications', label: 'Уведомления' },
 ];
 
 export function Admin({ today }: { today: string }) {
@@ -104,7 +105,7 @@ function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (tab === 'clients' || tab === 'masters') return;
+    if (tab === 'clients' || tab === 'masters' || tab === 'notifications') return;
     setLoading(true);
     setError('');
     try {
@@ -158,6 +159,8 @@ function AdminPanel({ today, onLogout }: { today: string; onLogout: () => void }
           <ClientsTab />
         ) : tab === 'masters' ? (
           <MastersTab />
+        ) : tab === 'notifications' ? (
+          <NotificationsTab />
         ) : (
           <>
             {tab === 'day' && (
@@ -715,6 +718,311 @@ function ClientDetails({ id, onChanged }: { id: number; onChanged: () => Promise
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Уведомления сотрудникам ───
+
+function NotificationsTab() {
+  const [state, setState] = useState<NotificationsState | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [maxTokenInput, setMaxTokenInput] = useState('');
+  const [vkTarget, setVkTarget] = useState('');
+  const [vkTitle, setVkTitle] = useState('');
+  const [testResults, setTestResults] = useState<string[] | null>(null);
+
+  const run = useCallback(async (action: () => Promise<NotificationsState>) => {
+    setBusy(true);
+    setError('');
+    try {
+      setState(await action());
+      return true;
+    } catch (err) {
+      setError((err as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void run(() => api.admin.notifications());
+  }, [run]);
+
+  if (!state) {
+    return error ? (
+      <ErrorNote>{error}</ErrorNote>
+    ) : (
+      <div className="flex items-center gap-2 text-text-muted py-10">
+        <Spinner /> Загружаем настройки…
+      </div>
+    );
+  }
+
+  const vkRecipients = state.recipients.filter((row) => row.channel === 'vk');
+  const maxRecipients = state.recipients.filter((row) => row.channel === 'max');
+  const enabledCount = state.recipients.filter((row) => row.enabled).length;
+
+  const test = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const { results } = await api.admin.testNotifications();
+      setTestResults(
+        results.length
+          ? results.map((r) => `${r.ok ? '✅' : '❌'} ${r.channel === 'vk' ? 'ВК' : 'MAX'} · ${r.title}`)
+          : ['Включённых получателей нет — отметьте хотя бы одного.'],
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addVk = async (target: string, title: string) => {
+    if (await run(() => api.admin.addVkRecipient(target, title))) {
+      setVkTarget('');
+      setVkTitle('');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-text-muted">
+        Сюда приходят новые записи, переносы и отмены. Отметьте, кому их присылать: людям во ВКонтакте, общему
+        чату в MAX или мастерам в личку MAX.
+      </p>
+
+      {error && <ErrorNote>{error}</ErrorNote>}
+
+      {/* MAX */}
+      <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-black uppercase tracking-tight">Мессенджер MAX</h2>
+          {state.max.bot ? (
+            <span className="text-sm text-emerald-500">
+              Бот подключён: {state.max.bot.name}
+              {state.max.bot.username && ` (@${state.max.bot.username})`}
+            </span>
+          ) : state.max.configured ? (
+            <span className="text-sm text-red-400">Токен не работает: {state.max.error}</span>
+          ) : (
+            <span className="text-sm text-text-muted">Бот не подключён</span>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-text-muted">Токен бота</label>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="password"
+              autoComplete="off"
+              value={maxTokenInput}
+              onChange={(event) => setMaxTokenInput(event.target.value)}
+              placeholder={state.max.configured ? 'Токен сохранён — введите новый, чтобы заменить' : 'Вставьте токен'}
+              className={`${inputClass} sm:max-w-md`}
+            />
+            <Button
+              onClick={() =>
+                void run(() => api.admin.saveMaxToken(maxTokenInput)).then((ok) => ok && setMaxTokenInput(''))
+              }
+              disabled={!maxTokenInput.trim()}
+              loading={busy}
+            >
+              Сохранить
+            </Button>
+            {state.max.configured && !state.max.fromEnv && (
+              <Button variant="ghost" onClick={() => void run(() => api.admin.saveMaxToken(''))} disabled={busy}>
+                Отключить
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-text-muted">
+            Токен выдаёт платформа MAX для партнёров (business.max.ru) после создания бота: раздел «Чат-боты» →
+            «Интеграция» → «Получить токен».
+          </p>
+        </div>
+
+        <ol className="text-sm text-text-muted list-decimal pl-5 space-y-1">
+          <li>Добавьте бота в общий чат мастеров в MAX — чат появится в списке ниже сам.</li>
+          <li>Если мастеру нужно в личку — пусть откроет бота и нажмёт «Начать».</li>
+          <li>Включите нужные чаты переключателем. Пока не включено — туда ничего не уходит.</li>
+        </ol>
+
+        <RecipientList
+          rows={maxRecipients}
+          empty={
+            state.max.bot
+              ? 'Пока никого. Добавьте бота в чат или напишите ему, затем нажмите «Обновить».'
+              : 'Сначала сохраните токен бота.'
+          }
+          busy={busy}
+          onToggle={(row) => void run(() => api.admin.setRecipientEnabled(row.id, !row.enabled))}
+          onRemove={(row) => void run(() => api.admin.removeRecipient(row.id))}
+        />
+        {state.max.bot && (
+          <Button variant="ghost" onClick={() => void run(() => api.admin.notifications())} disabled={busy}>
+            Обновить
+          </Button>
+        )}
+      </section>
+
+      {/* ВКонтакте */}
+      <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+        <h2 className="text-lg font-black uppercase tracking-tight">ВКонтакте</h2>
+
+        {!state.vk.botEnabled && (
+          <ErrorNote>Токен сообщества ВК не задан на сервере — сообщения в ВК не уходят.</ErrorNote>
+        )}
+
+        <RecipientList
+          rows={vkRecipients}
+          empty="Пока никого. Выберите человека ниже."
+          busy={busy}
+          onToggle={(row) => void run(() => api.admin.setRecipientEnabled(row.id, !row.enabled))}
+          onRemove={(row) => void run(() => api.admin.removeRecipient(row.id))}
+        />
+
+        {state.candidates.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-text-muted">Добавить из тех, кто входил на сайт через ВК</p>
+            <div className="flex flex-wrap gap-2">
+              {state.candidates.map((user) => (
+                <button
+                  key={user.vkId}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void addVk(user.vkId, user.name)}
+                  className="rounded-full border border-border bg-bg-main px-3 py-1.5 text-sm hover:border-orange-500/60 disabled:opacity-50"
+                >
+                  + {user.name || `id${user.vkId}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-text-muted">Или вручную: id человека или peer_id беседы</p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={vkTarget}
+              onChange={(event) => setVkTarget(event.target.value)}
+              placeholder="123456789 или 2000000001"
+              inputMode="numeric"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <input
+              value={vkTitle}
+              onChange={(event) => setVkTitle(event.target.value)}
+              placeholder="Подпись, например «Айдыс»"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <Button onClick={() => void addVk(vkTarget, vkTitle)} disabled={!vkTarget.trim()} loading={busy}>
+              Добавить
+            </Button>
+          </div>
+          <p className="text-xs text-text-muted">
+            ВК доставит сообщение в личку, только если человек разрешил сообщения от сообщества
+            {state.vk.communityUrl && (
+              <>
+                {' '}
+                — пусть напишет сюда:{' '}
+                <a href={state.vk.communityUrl} target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">
+                  диалог с сообществом
+                </a>
+              </>
+            )}
+            . Для беседы добавьте сообщество в беседу.
+            {state.vk.envPeers.length > 0 && ` Ещё получают из настроек сервера: ${state.vk.envPeers.join(', ')}.`}
+          </p>
+        </div>
+
+        {!state.vk.callbackReady && (
+          <p className="text-xs text-text-muted">
+            Callback API ВК не настроен, поэтому кнопки «Всё верно» и «Отменить» в сообщениях клиентам заменены
+            ссылками на личный кабинет. Перенос работает и так.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-border bg-surface p-5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="flex items-center gap-2 font-bold">
+            <Bell className="w-4 h-4 text-orange-500" /> Включено получателей: {enabledCount}
+          </p>
+          <Button variant="ghost" onClick={() => void test()} disabled={busy || enabledCount === 0}>
+            <Send className="w-4 h-4" /> Отправить проверку
+          </Button>
+        </div>
+        {testResults && (
+          <ul className="text-sm space-y-1">
+            {testResults.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function RecipientList({
+  rows,
+  empty,
+  busy,
+  onToggle,
+  onRemove,
+}: {
+  rows: NotifyRecipient[];
+  empty: string;
+  busy: boolean;
+  onToggle: (row: NotifyRecipient) => void;
+  onRemove: (row: NotifyRecipient) => void;
+}) {
+  if (!rows.length) {
+    return <p className="rounded-xl border border-dashed border-border p-4 text-sm text-text-muted">{empty}</p>;
+  }
+
+  return (
+    <div className="divide-y divide-border rounded-xl border border-border">
+      {rows.map((row) => (
+        <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="font-medium truncate">{row.title}</p>
+            <p className="text-xs text-text-muted">
+              {row.kind === 'chat' ? 'Групповой чат' : 'Личные сообщения'}
+              {row.messagesAllowed === false && (
+                <span className="text-red-400"> · не разрешил сообщения от сообщества — не дойдёт</span>
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={row.enabled}
+                disabled={busy}
+                onChange={() => onToggle(row)}
+                className="w-5 h-5 accent-orange-500"
+              />
+              {row.enabled ? 'Получает' : 'Выключен'}
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onRemove(row)}
+              title="Убрать из списка"
+              className="p-2 text-text-muted hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

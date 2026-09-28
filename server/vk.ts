@@ -13,7 +13,15 @@ export interface VkProfile {
   phone: string | null;
 }
 
-export class VkError extends Error {}
+export class VkError extends Error {
+  constructor(
+    message: string,
+    /** Код ошибки API ВК, если это ошибка метода, а не OAuth. */
+    readonly code?: number,
+  ) {
+    super(message);
+  }
+}
 
 function base64url(input: Buffer): string {
   return input.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -67,7 +75,11 @@ async function postForm(url: string, body: Record<string, string>): Promise<any>
   const json = await response.json().catch(() => null);
   if (!json) throw new VkError(`ВК вернул неожиданный ответ (${response.status})`);
   if (json.error) {
-    throw new VkError(json.error_description || json.error_msg || String(json.error));
+    // OAuth отдаёт error строкой, методы API — объектом { error_code, error_msg }.
+    if (typeof json.error === 'object') {
+      throw new VkError(`${json.error.error_code}: ${json.error.error_msg}`, json.error.error_code);
+    }
+    throw new VkError(json.error_description || String(json.error));
   }
   return json;
 }
@@ -116,22 +128,31 @@ async function callApi(method: string, params: Record<string, string>): Promise<
   return json.response;
 }
 
-export interface VkKeyboardButton {
-  label: string;
-  payload: Record<string, unknown>;
-  color?: 'primary' | 'secondary' | 'negative' | 'positive';
-}
+/** Кнопка либо шлёт событие на сервер (payload), либо открывает ссылку (link). */
+export type VkKeyboardButton =
+  | { label: string; payload: Record<string, unknown>; color?: 'primary' | 'secondary' | 'negative' | 'positive' }
+  | { label: string; link: string };
 
 function inlineKeyboard(buttons: VkKeyboardButton[]): string {
   return JSON.stringify({
     inline: true,
     buttons: buttons.map((button) => [
-      {
-        action: { type: 'callback', label: button.label, payload: JSON.stringify(button.payload) },
-        color: button.color ?? 'secondary',
-      },
+      'link' in button
+        ? { action: { type: 'open_link', label: button.label, link: button.link } }
+        : {
+            action: { type: 'callback', label: button.label, payload: JSON.stringify(button.payload) },
+            color: button.color ?? 'secondary',
+          },
     ]),
   });
+}
+
+/**
+ * Нажатия callback-кнопок ВК присылает только на настроенный Callback API.
+ * Без него такие кнопки молча не работают — вместо них показываем ссылки.
+ */
+export function callbackButtonsReady(): boolean {
+  return Boolean(env.vk.callbackConfirmation);
 }
 
 /**
@@ -156,6 +177,19 @@ export async function sendMessage(
     await callApi('messages.send', params);
     return true;
   } catch (error) {
+    // 912 — в сообществе выключены «Возможности ботов», кнопки ВК не пропустит.
+    // Сообщение важнее кнопок: отправляем без них.
+    if (error instanceof VkError && error.code === 912 && params.keyboard) {
+      console.warn('[vk] кнопки недоступны — включите «Возможности ботов» в настройках сообщества');
+      delete params.keyboard;
+      params.random_id = String(crypto.randomInt(1, 2 ** 31 - 1));
+      try {
+        await callApi('messages.send', params);
+        return true;
+      } catch (retryError) {
+        error = retryError;
+      }
+    }
     // 901 — пользователь запретил сообщения от сообщества.
     console.warn(`[vk] не удалось отправить сообщение ${vkId}:`, (error as Error).message);
     return false;

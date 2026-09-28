@@ -47,6 +47,21 @@ async function replyToMessage(vkId: string, text: string): Promise<void> {
   const normalized = text.trim().toLowerCase();
   const upcoming = upcomingBookings(user.id);
 
+  if (normalized.includes('перен') || normalized.includes('отмен') || normalized.includes('не смогу')) {
+    await sendMessage(
+      vkId,
+      upcoming.length
+        ? [
+            `${user.first_name}, ваша ближайшая запись: ${describe(upcoming[0])}`,
+            '',
+            `Перенести на другое время: ${env.appUrl}/profile?move=${upcoming[0].id}`,
+            `Отменить можно там же, в личном кабинете: ${env.appUrl}/profile`,
+          ].join('\n')
+        : `${user.first_name}, активных записей нет. Записаться: ${env.appUrl}`,
+    );
+    return;
+  }
+
   if (normalized.includes('скид') || normalized.includes('бонус') || normalized.includes('баланс')) {
     await sendMessage(
       vkId,

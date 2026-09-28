@@ -86,6 +86,30 @@ db.exec(`
   );
 
   CREATE UNIQUE INDEX IF NOT EXISTS idx_master_vk ON master_profiles (vk_id) WHERE vk_id IS NOT NULL;
+
+  /* Настройки, которые меняют из админки: токен бота MAX и т. п. */
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  /*
+   * Кому приходят уведомления о записях. ВК: target — peer_id (id человека
+   * или 2000000000 + номер беседы). MAX: target — chat_id чата или диалога с ботом.
+   * Новые чаты MAX появляются сами, но выключенными: включает администратор,
+   * иначе любой, кто добавит бота к себе, получал бы телефоны клиентов.
+   */
+  CREATE TABLE IF NOT EXISTS notify_recipients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    target TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'person',
+    title TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (channel, target)
+  );
 `);
 
 export interface UserRow {
@@ -126,6 +150,35 @@ export interface MasterProfileRow {
   vk_id: string | null;
   photo: string | null;
   updated_at: string;
+}
+
+export type NotifyChannel = 'vk' | 'max';
+
+export interface NotifyRecipientRow {
+  id: number;
+  channel: NotifyChannel;
+  target: string;
+  kind: 'person' | 'chat';
+  title: string;
+  enabled: number;
+  created_at: string;
+}
+
+export function getSetting(key: string): string | undefined {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value;
+}
+
+/** Пустое значение удаляет настройку. */
+export function setSetting(key: string, value: string | null): void {
+  if (!value) {
+    db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+    return;
+  }
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+  ).run(key, value);
 }
 
 export interface BonusTransactionRow {

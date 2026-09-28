@@ -1,10 +1,18 @@
 import { Router } from 'express';
+import { minutesToTime } from '../../shared/catalog';
 import type { BonusTransactionView } from '../../shared/types';
 import { requireClient } from '../auth';
-import { BookingError, cancelBooking, getBooking, toBookingView } from '../bookings';
+import {
+  BookingError,
+  cancelBooking,
+  getAvailability,
+  getBooking,
+  rescheduleBooking,
+  toBookingView,
+} from '../bookings';
 import { db, type BonusTransactionRow, type BookingRow } from '../db';
 import { masterByVkId } from '../masters';
-import { notifyBookingCancelled } from '../notify';
+import { notifyBookingCancelled, notifyBookingRescheduled } from '../notify';
 import { isValidDate, salonToday } from '../time';
 import { toPublicUser } from '../views';
 
@@ -101,6 +109,55 @@ clientRouter.post('/bookings/:id/cancel', async (req, res) => {
       console.error('[notify] уведомление об отмене не отправлено:', error);
     });
     res.json({ booking: toBookingView(cancelled) });
+  } catch (error) {
+    if (error instanceof BookingError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+/** Своя запись клиента; чужие для него не существуют. */
+function ownBooking(id: number, userId: number) {
+  const booking = getBooking(id);
+  return booking && booking.user_id === userId ? booking : undefined;
+}
+
+/** Окошки для переноса: у того же мастера, под ту же длительность, своё время не мешает. */
+clientRouter.get('/bookings/:id/availability', (req, res) => {
+  const booking = ownBooking(Number(req.params.id), req.user!.id);
+  if (!booking) {
+    res.status(404).json({ error: 'Запись не найдена' });
+    return;
+  }
+  const date = String(req.query.date ?? '');
+  if (!isValidDate(date)) {
+    res.status(400).json({ error: 'Некорректная дата' });
+    return;
+  }
+  const availability = getAvailability(date, booking.master_id, booking.duration_minutes, booking.id);
+  // Текущее время записи не предлагаем — переносить на него бессмысленно.
+  if (date === booking.date) {
+    const current = availability.slots.find((slot) => slot.time === minutesToTime(booking.start_minutes));
+    if (current) current.available = false;
+  }
+  res.json(availability);
+});
+
+clientRouter.post('/bookings/:id/reschedule', async (req, res) => {
+  const booking = ownBooking(Number(req.params.id), req.user!.id);
+  if (!booking) {
+    res.status(404).json({ error: 'Запись не найдена' });
+    return;
+  }
+
+  try {
+    const moved = rescheduleBooking(booking.id, String(req.body?.date ?? ''), String(req.body?.time ?? ''));
+    void notifyBookingRescheduled(moved, booking).catch((error) => {
+      console.error('[notify] уведомление о переносе не отправлено:', error);
+    });
+    res.json({ booking: toBookingView(moved) });
   } catch (error) {
     if (error instanceof BookingError) {
       res.status(error.status).json({ error: error.message });

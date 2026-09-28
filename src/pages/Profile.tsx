@@ -1,13 +1,49 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, CalendarDays, History, Percent, Phone, Scissors } from 'lucide-react';
+import { Bell, CalendarDays, History, Percent, Phone, Repeat, Scissors } from 'lucide-react';
 import { BONUS_PER_VISIT, MAX_BONUS_PERCENT } from '../../shared/catalog';
-import type { BonusTransactionView, BookingView } from '../../shared/types';
+import type { AvailabilityResponse, BonusTransactionView, BookingView } from '../../shared/types';
 import { api } from '../api';
+import { DateStrip } from '../components/DateStrip';
 import { MasterSchedule } from '../components/MasterSchedule';
+import { SlotGrid } from '../components/SlotGrid';
 import { Button, ErrorNote, SectionHeading, Spinner, StatusBadge } from '../components/ui';
 import { VkLoginButton } from '../components/VkLoginButton';
 import { formatDate, formatDateFull, formatDuration, formatPhone, formatTimestamp, plural } from '../lib/format';
+import { queryParam } from '../lib/router';
 import { useSession } from '../lib/session';
+
+/**
+ * Ссылка «Перенести» из сообщения бота: /profile?move=ID. Если клиент ещё
+ * не вошёл, вход через ВК вернёт его на /profile без параметра — поэтому
+ * номер записи на это время откладываем в sessionStorage.
+ */
+const MOVE_KEY = 'vibe:move-booking';
+
+function pendingMoveId(): number | null {
+  const fromUrl = queryParam('move');
+  if (fromUrl) {
+    try {
+      sessionStorage.setItem(MOVE_KEY, fromUrl);
+    } catch {
+      // Приватный режим — обойдёмся параметром из адреса.
+    }
+    return Number(fromUrl) || null;
+  }
+  try {
+    return Number(sessionStorage.getItem(MOVE_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingMove(): void {
+  try {
+    sessionStorage.removeItem(MOVE_KEY);
+  } catch {
+    // Нечего чистить.
+  }
+  if (queryParam('move')) window.history.replaceState({}, '', window.location.pathname);
+}
 
 export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
   const { user, config, loading: sessionLoading, refresh } = useSession();
@@ -19,6 +55,8 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [phone, setPhone] = useState('');
   const [phoneSaved, setPhoneSaved] = useState(false);
+  const [movingId, setMovingId] = useState<number | null>(null);
+  const [movedNote, setMovedNote] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,6 +78,18 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
   useEffect(() => {
     if (user?.phone) setPhone(formatPhone(user.phone));
   }, [user]);
+
+  // Пришли по ссылке «Перенести» — сразу открываем выбор времени у этой записи.
+  useEffect(() => {
+    if (loading || !user) return;
+    const id = pendingMoveId();
+    if (!id) return;
+    clearPendingMove();
+    if (bookings.some((booking) => booking.id === id && (booking.status === 'pending' || booking.status === 'confirmed'))) {
+      setMovingId(id);
+      setTimeout(() => document.getElementById(`booking-${id}`)?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [loading, user, bookings]);
 
   if (sessionLoading) {
     return (
@@ -104,6 +154,11 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
         <SectionHeading title={`Привет, ${user.firstName}!`} />
 
         {error && <ErrorNote>{error}</ErrorNote>}
+        {movedNote && (
+          <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 text-emerald-500">
+            {movedNote}
+          </p>
+        )}
 
         {/* Кабинет мастера — только для закреплённых аккаунтов */}
         {user.masterId && config && (
@@ -198,33 +253,55 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
               {upcoming.map((booking) => (
                 <article
                   key={booking.id}
-                  className="rounded-2xl border border-border bg-surface p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
+                  id={`booking-${booking.id}`}
+                  className="rounded-2xl border border-border bg-surface p-5 space-y-5 scroll-mt-28"
                 >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-lg font-bold">{formatDateFull(booking.date)}</span>
-                      <StatusBadge status={booking.status} />
-                    </div>
-                    <p className="text-text-muted">
-                      {booking.time}–{booking.endTime} · {booking.service} · {booking.masterName}
-                    </p>
-                    {booking.finalPrice !== null && (
-                      <p className="text-sm">
-                        <span className="font-bold text-orange-500">{booking.finalPrice}р</span>
-                        {booking.discountPercent > 0 && (
-                          <span className="text-text-muted"> · списываем {booking.discountPercent}%</span>
-                        )}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-lg font-bold">{formatDateFull(booking.date)}</span>
+                        <StatusBadge status={booking.status} />
+                      </div>
+                      <p className="text-text-muted">
+                        {booking.time}–{booking.endTime} · {booking.service} · {booking.masterName}
                       </p>
-                    )}
+                      {booking.finalPrice !== null && (
+                        <p className="text-sm">
+                          <span className="font-bold text-orange-500">{booking.finalPrice}р</span>
+                          {booking.discountPercent > 0 && (
+                            <span className="text-text-muted"> · списываем {booking.discountPercent}%</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setMovingId(movingId === booking.id ? null : booking.id)}
+                        disabled={busyId === booking.id}
+                      >
+                        <Repeat className="w-4 h-4" /> Перенести
+                      </Button>
+                      <Button variant="danger" loading={busyId === booking.id} onClick={() => void cancel(booking.id)}>
+                        Отменить
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    variant="danger"
-                    loading={busyId === booking.id}
-                    onClick={() => void cancel(booking.id)}
-                    className="shrink-0"
-                  >
-                    Отменить
-                  </Button>
+                  {movingId === booking.id && config && (
+                    <RescheduleForm
+                      booking={booking}
+                      today={config.today}
+                      horizonDays={config.horizonDays}
+                      onClose={() => setMovingId(null)}
+                      onMoved={async (moved) => {
+                        setMovingId(null);
+                        setMovedNote(
+                          `Запись перенесена на ${formatDateFull(moved.date)}, ${moved.time}. Салон подтвердит новое время.`,
+                        );
+                        await load();
+                      }}
+                    />
+                  )}
                 </article>
               ))}
             </div>
@@ -289,6 +366,79 @@ export function Profile({ onNavigate }: { onNavigate: (to: string) => void }) {
             </div>
           </section>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Выбор нового дня и времени у того же мастера. */
+function RescheduleForm({
+  booking,
+  today,
+  horizonDays,
+  onClose,
+  onMoved,
+}: {
+  booking: BookingView;
+  today: string;
+  horizonDays: number;
+  onClose: () => void;
+  onMoved: (booking: BookingView) => Promise<void> | void;
+}) {
+  const [date, setDate] = useState(booking.date >= today ? booking.date : today);
+  const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
+  const [time, setTime] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setTime('');
+    setError('');
+    api
+      .rescheduleAvailability(booking.id, date)
+      .then((response) => !cancelled && setAvailability(response))
+      .catch((err) => !cancelled && setError((err as Error).message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [booking.id, date]);
+
+  const submit = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await api.rescheduleMyBooking(booking.id, date, time);
+      await onMoved(response.booking);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-border pt-5 space-y-4">
+      <p className="font-bold">Новое время у мастера {booking.masterName}</p>
+      <DateStrip today={today} value={date} onChange={setDate} days={Math.min(horizonDays + 1, 30)} />
+      <SlotGrid
+        slots={availability?.slots ?? []}
+        value={time}
+        onChange={setTime}
+        loading={loading}
+        emptyText="На этот день у мастера свободных окошек нет. Выберите другой день."
+      />
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => void submit()} disabled={!time} loading={saving}>
+          {time ? `Перенести на ${formatDate(date)}, ${time}` : 'Выберите время'}
+        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={saving}>
+          Не переносить
+        </Button>
       </div>
     </div>
   );

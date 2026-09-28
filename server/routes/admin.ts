@@ -22,7 +22,16 @@ import {
   saveMasterPhoto,
   setMasterVkId,
 } from '../masters';
-import { notifyBookingCancelled, notifyBookingConfirmed, notifyVisitCompleted } from '../notify';
+import { MaxError, botInfo, maxToken, saveMaxToken } from '../max';
+import { notifyBookingCancelled, notifyBookingConfirmed, notifyVisitCompleted, sendStaffTest } from '../notify';
+import {
+  RecipientError,
+  addVkRecipient,
+  listRecipients,
+  removeRecipient,
+  setRecipientEnabled,
+} from '../recipients';
+import { callbackButtonsReady, isMessagingAllowed } from '../vk';
 import { isValidDate, salonToday } from '../time';
 
 export const adminRouter = Router();
@@ -348,4 +357,105 @@ adminRouter.post('/clients/:id/bonus', (req, res) => {
     }
     throw error;
   }
+});
+
+// ─── Уведомления сотрудникам: ВК и MAX ───
+
+async function notificationsState() {
+  const token = maxToken();
+  let bot: { name: string; username: string | null } | null = null;
+  let maxError: string | null = null;
+  if (token) {
+    try {
+      bot = await botInfo();
+    } catch (error) {
+      maxError = (error as Error).message;
+    }
+  }
+
+  const rows = listRecipients();
+  const recipients = await Promise.all(
+    rows.map(async (row) => ({
+      id: row.id,
+      channel: row.channel,
+      target: row.target,
+      kind: row.kind,
+      title: row.title,
+      enabled: Boolean(row.enabled),
+      // ВК доставит в личку, только если человек разрешил сообщения сообщества.
+      messagesAllowed:
+        row.channel === 'vk' && row.kind === 'person' ? await isMessagingAllowed(row.target) : null,
+    })),
+  );
+
+  const taken = new Set(rows.filter((row) => row.channel === 'vk').map((row) => row.target));
+  const candidates = (
+    db.prepare('SELECT * FROM users WHERE vk_id IS NOT NULL ORDER BY first_name, last_name').all() as UserRow[]
+  )
+    .filter((user) => !taken.has(user.vk_id!))
+    .map((user) => ({ vkId: user.vk_id!, name: `${user.first_name} ${user.last_name}`.trim() }));
+
+  return {
+    max: {
+      configured: Boolean(token),
+      fromEnv: Boolean(token && token === env.max.botToken),
+      bot,
+      error: maxError,
+    },
+    vk: {
+      botEnabled: env.vk.botEnabled,
+      callbackReady: callbackButtonsReady(),
+      communityUrl: env.vk.groupId ? `https://vk.com/im?sel=-${env.vk.groupId}` : null,
+      envPeers: env.vk.adminPeerIds,
+    },
+    recipients,
+    candidates,
+  };
+}
+
+async function handleRecipientAction(res: Response, action: () => void | Promise<void>): Promise<void> {
+  try {
+    await action();
+    res.json(await notificationsState());
+  } catch (error) {
+    if (error instanceof RecipientError || error instanceof MaxError) {
+      res.status(error instanceof RecipientError ? error.status : 400).json({ error: error.message });
+      return;
+    }
+    console.error('[admin] ошибка в настройках уведомлений:', error);
+    res.status(500).json({ error: 'Не удалось сохранить' });
+  }
+}
+
+adminRouter.get('/notifications', async (_req, res) => {
+  res.json(await notificationsState());
+});
+
+/** Токен проверяется запросом к MAX до сохранения. Пустой — отключает бота. */
+adminRouter.put('/notifications/max-token', async (req, res) => {
+  await handleRecipientAction(res, async () => {
+    try {
+      await saveMaxToken(String(req.body?.token ?? ''));
+    } catch (error) {
+      throw new MaxError(`MAX не принял токен: ${(error as Error).message}`);
+    }
+  });
+});
+
+adminRouter.post('/notifications/vk', async (req, res) => {
+  await handleRecipientAction(res, () => {
+    addVkRecipient(String(req.body?.target ?? ''), String(req.body?.title ?? ''));
+  });
+});
+
+adminRouter.patch('/notifications/:id', async (req, res) => {
+  await handleRecipientAction(res, () => setRecipientEnabled(Number(req.params.id), Boolean(req.body?.enabled)));
+});
+
+adminRouter.delete('/notifications/:id', async (req, res) => {
+  await handleRecipientAction(res, () => removeRecipient(Number(req.params.id)));
+});
+
+adminRouter.post('/notifications/test', async (_req, res) => {
+  res.json({ results: await sendStaffTest() });
 });

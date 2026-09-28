@@ -90,6 +90,16 @@ export const api = {
   cancelMyBooking: (id: number) =>
     request<{ booking: BookingView }>(`/me/bookings/${id}/cancel`, { method: 'POST' }),
 
+  /** Свободные окошки для переноса своей записи — у того же мастера. */
+  rescheduleAvailability: (id: number, date: string) =>
+    request<AvailabilityResponse>(`/me/bookings/${id}/availability?date=${date}`),
+
+  rescheduleMyBooking: (id: number, date: string, time: string) =>
+    request<{ booking: BookingView }>(`/me/bookings/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify({ date, time }),
+    }),
+
   /** Записи к самому мастеру — только для аккаунтов, закреплённых за мастером. */
   masterBookings: (params: { scope: 'day' | 'upcoming'; date?: string }) =>
     request<{ master: Master; date: string; bookings: BookingView[] }>(
@@ -155,6 +165,35 @@ export const api = {
     deleteMasterPhoto: (id: string) =>
       request<{ masters: AdminMaster[] }>(`/admin/masters/${id}/photo`, { method: 'DELETE' }),
 
+    notifications: () => request<NotificationsState>('/admin/notifications'),
+
+    saveMaxToken: (token: string) =>
+      request<NotificationsState>('/admin/notifications/max-token', {
+        method: 'PUT',
+        body: JSON.stringify({ token }),
+      }),
+
+    addVkRecipient: (target: string, title: string) =>
+      request<NotificationsState>('/admin/notifications/vk', {
+        method: 'POST',
+        body: JSON.stringify({ target, title }),
+      }),
+
+    setRecipientEnabled: (id: number, enabled: boolean) =>
+      request<NotificationsState>(`/admin/notifications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      }),
+
+    removeRecipient: (id: number) =>
+      request<NotificationsState>(`/admin/notifications/${id}`, { method: 'DELETE' }),
+
+    testNotifications: () =>
+      request<{ results: { channel: 'vk' | 'max'; target: string; title: string; ok: boolean }[] }>(
+        '/admin/notifications/test',
+        { method: 'POST' },
+      ),
+
     adjustBonus: (id: number, delta: number, reason: string) =>
       request<{ balance: number }>(`/admin/clients/${id}/bonus`, {
         method: 'POST',
@@ -170,4 +209,33 @@ export interface AdminClient {
   phone: string | null;
   bonusPercent: number;
   vkMessagesAllowed: boolean;
+}
+
+export interface NotifyRecipient {
+  id: number;
+  channel: 'vk' | 'max';
+  target: string;
+  kind: 'person' | 'chat';
+  title: string;
+  enabled: boolean;
+  /** Только для людей в ВК: разрешил ли сообщения от сообщества. */
+  messagesAllowed: boolean | null;
+}
+
+export interface NotificationsState {
+  max: {
+    configured: boolean;
+    fromEnv: boolean;
+    bot: { name: string; username: string | null } | null;
+    error: string | null;
+  };
+  vk: {
+    botEnabled: boolean;
+    callbackReady: boolean;
+    communityUrl: string | null;
+    envPeers: string[];
+  };
+  recipients: NotifyRecipient[];
+  /** Вошедшие на сайт через ВК, которых ещё нет среди получателей. */
+  candidates: { vkId: string; name: string }[];
 }

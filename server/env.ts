@@ -90,6 +90,12 @@ export const env = {
       .filter(Boolean),
   },
 
+  max: {
+    /** Токен бота MAX обычно вводят в админке; переменная — запасной вариант. */
+    botToken: optional('MAX_BOT_TOKEN'),
+    apiUrl: (optional('MAX_API_URL') ?? 'https://platform-api.max.ru').replace(/\/+$/, ''),
+  },
+
   /** За сколько часов до визита бот присылает напоминание. */
   reminderHoursBefore: number('REMINDER_HOURS_BEFORE', 3),
   /** Часовой пояс салона в минутах от UTC. Кызыл — UTC+7. */
