@@ -630,7 +630,7 @@ function DutyScreen({ role, today, masters }: { role: StaffRole; today: string; 
     <div className="space-y-4">
       <p className="text-text-muted">
         {role.isAdmin
-          ? 'Назначенному дежурному сразу придёт сообщение, а утром в его день — напоминание.'
+          ? 'В 8:30 бот напишет в рабочий чат, кто сегодня дежурный.'
           : 'Дежурный записывает в кассу каждого клиента и следит за порядком.'}
       </p>
       {error && <ErrorNote>{error}</ErrorNote>}

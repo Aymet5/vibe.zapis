@@ -199,7 +199,7 @@ function assertDate(date: string): void {
   if (!isValidDate(date)) throw new CashError('Некорректная дата');
 }
 
-/** Назначает дежурного. Мастер сразу получает сообщение, если день ещё не прошёл. */
+/** Назначает дежурного. Лично ему не пишем — утром о дежурном сообщают в рабочий чат. */
 export async function setDuty(date: string, masterId: string | null, byUserId: number): Promise<void> {
   assertDate(date);
   const previous = dutyFor(date).masterId;
@@ -215,14 +215,6 @@ export async function setDuty(date: string, masterId: string | null, byUserId: n
      ON CONFLICT(date) DO UPDATE SET master_id = excluded.master_id, assigned_by = excluded.assigned_by,
        morning_sent_at = NULL, updated_at = datetime('now')`,
   ).run(date, masterId, byUserId);
-
-  if (date >= salonToday()) {
-    const when = date === salonToday() ? `сегодня, ${formatDateHuman(date)}` : formatDateHuman(date);
-    void sendToMaster(
-      masterId,
-      `Вы дежурный ${when}. Следите за порядком и записывайте в кассу каждого клиента — мастер, стрижка, цена.`,
-    ).catch((error) => console.warn('[cash] не удалось сообщить о дежурстве:', (error as Error).message));
-  }
 }
 
 /**
@@ -733,10 +725,6 @@ async function morningDuty(): Promise<void> {
   db.prepare(`UPDATE duty_days SET morning_sent_at = datetime('now') WHERE date = ?`).run(today);
 
   const name = masterName(row.master_id);
-  await sendToMaster(
-    row.master_id,
-    `Доброе утро! Сегодня вы дежурный. Записывайте в кассу каждого клиента — вечером бот сам пришлёт итог.`,
-  );
   if (maxToken()) {
     const link = await miniAppLink('cash');
     await Promise.all(
