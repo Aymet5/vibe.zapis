@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, Clock, Percent, Phone, Repeat, Scissors, User } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Percent, Phone, Repeat, Scissors, User, Wallet } from 'lucide-react';
 import {
   BONUS_PER_VISIT,
   CATEGORIES,
@@ -12,7 +12,7 @@ import {
   type Service,
 } from '../../shared/catalog';
 import type { BookingView, PublicMaster } from '../../shared/types';
-import { api } from '../api';
+import { api, type StaffRole } from '../api';
 import { DateStrip } from '../components/DateStrip';
 import { SlotGrid } from '../components/SlotGrid';
 import { Button, ErrorNote, Spinner, StatusBadge, inputClass } from '../components/ui';
@@ -20,14 +20,16 @@ import { formatDate, formatDateFull, formatDuration, formatPhone, plural } from 
 import { haptic, maxStartParam, requestMaxPhone, setMaxBackButton, signalMaxReady } from '../lib/maxApp';
 import { useSession } from '../lib/session';
 import { RescheduleForm } from '../pages/Profile';
+import { CashScreen } from './CashScreen';
 
 /**
  * Сайт внутри мини-приложения MAX. Никакого лендинга: три вкладки снизу,
  * запись по шагам, системная кнопка «Назад» и отклик вибрацией —
  * чтобы ощущалось как приложение, а не как открытая в чате страница.
+ * Сотрудникам добавляется четвёртая вкладка — касса дня.
  */
 
-type Tab = 'book' | 'bookings' | 'profile';
+type Tab = 'book' | 'bookings' | 'profile' | 'cash';
 
 const START_DONE_KEY = 'vibe:max-start-done';
 
@@ -52,6 +54,23 @@ export function MaxApp() {
   }, []);
   const [tab, setTab] = useState<Tab>('book');
   const [moveId, setMoveId] = useState<number | null>(null);
+  const [staff, setStaff] = useState<StaffRole | null>(null);
+
+  // Сотрудника узнаём по телефону, поэтому спрашиваем заново, когда он появился.
+  useEffect(() => {
+    if (!user?.phone) {
+      setStaff(null);
+      return;
+    }
+    let cancelled = false;
+    api.staff
+      .me()
+      .then((response) => !cancelled && setStaff(response.role))
+      .catch(() => !cancelled && setStaff(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.phone]);
 
   // Внутри MAX следуем теме телефона, а не сохранённой на сайте.
   useEffect(() => {
@@ -71,6 +90,8 @@ export function MaxApp() {
       setTab('bookings');
     } else if (start === 'profile') {
       setTab('profile');
+    } else if (start === 'cash') {
+      setTab('cash');
     }
   }, [loading]);
 
@@ -122,21 +143,30 @@ export function MaxApp() {
           />
         )}
         {tab === 'profile' && <ProfileScreen />}
+        {tab === 'cash' &&
+          (staff ? (
+            <CashScreen role={staff} today={config.today} masters={config.masters} />
+          ) : (
+            <div className="flex justify-center py-16 text-text-muted">
+              <Spinner />
+            </div>
+          ))}
       </main>
 
-      <nav className="fixed bottom-0 inset-x-0 z-30 grid grid-cols-3 border-t border-border bg-bg-main/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
-        {(
-          [
-            { id: 'book', label: 'Запись', icon: Scissors },
-            { id: 'bookings', label: 'Мои записи', icon: CalendarDays },
-            { id: 'profile', label: 'Профиль', icon: User },
-          ] as const
-        ).map((item) => (
+      <nav
+        className={`fixed bottom-0 inset-x-0 z-30 grid ${staff ? 'grid-cols-4' : 'grid-cols-3'} border-t border-border bg-bg-main/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]`}
+      >
+        {[
+          { id: 'book' as const, label: 'Запись', icon: Scissors },
+          { id: 'bookings' as const, label: 'Мои записи', icon: CalendarDays },
+          ...(staff ? [{ id: 'cash' as const, label: 'Касса', icon: Wallet }] : []),
+          { id: 'profile' as const, label: 'Профиль', icon: User },
+        ].map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => switchTab(item.id)}
-            className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${
+            className={`flex flex-col items-center gap-1 py-2.5 text-xs font-semibold transition-colors ${
               tab === item.id ? 'text-orange-500' : 'text-text-muted'
             }`}
           >

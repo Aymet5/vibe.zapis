@@ -9,6 +9,7 @@ import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { clientRouter } from './routes/client';
 import { publicRouter } from './routes/public';
+import { staffRouter } from './routes/staff';
 import { vkCallbackRouter } from './routes/vkCallback';
 import { startScheduler } from './scheduler';
 
@@ -27,6 +28,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/vk', vkCallbackRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/me', clientRouter);
+app.use('/api/staff', staffRouter);
 app.use('/api', publicRouter);
 
 app.use('/api', (_req, res) => {

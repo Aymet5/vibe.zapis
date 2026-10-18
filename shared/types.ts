@@ -26,6 +26,8 @@ export interface PublicUser {
   bonusPercent: number;
   /** Разрешил ли клиент сообщения от сообщества ВК. */
   vkMessagesAllowed: boolean;
+  /** Через какой мессенджер вошёл клиент — туда и пишет бот. */
+  messenger: 'vk' | 'max' | null;
   visitsCount: number;
   /** Если аккаунт закреплён за мастером — его id, иначе null. */
   masterId: string | null;

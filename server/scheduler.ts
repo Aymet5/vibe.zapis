@@ -1,3 +1,4 @@
+import { cashbookTick } from './cashbook';
 import { maybePostMorning } from './chatbot';
 import { cleanupExpired, db, type BookingRow } from './db';
 import { env } from './env';
@@ -47,6 +48,7 @@ export function startScheduler(): void {
     try {
       await sendDueReminders();
       await maybePostMorning();
+      await cashbookTick();
       cleanupExpired();
     } catch (error) {
       console.error('[scheduler] ошибка в цикле напоминаний:', error);

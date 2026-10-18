@@ -118,6 +118,42 @@ export const api = {
   maxLogin: (initData: string) =>
     request<{ user: PublicUser }>('/auth/max', { method: 'POST', body: JSON.stringify({ initData }) }),
 
+  /** Касса дня — только для сотрудников. */
+  staff: {
+    me: () => request<{ role: StaffRole; today: string }>('/staff/me'),
+
+    day: (date: string) => request<{ day: CashDay }>(`/staff/day?date=${date}`),
+
+    addEntry: (entry: { date: string; masterId: string; service: string; price: number }) =>
+      request<{ day: CashDay }>('/staff/entries', { method: 'POST', body: JSON.stringify(entry) }),
+
+    deleteEntry: (id: number, date: string) =>
+      request<{ day: CashDay }>(`/staff/entries/${id}?date=${date}`, { method: 'DELETE' }),
+
+    closeDay: (date: string) => request<{ day: CashDay }>(`/staff/day/${date}/close`, { method: 'POST' }),
+
+    reopenDay: (date: string) => request<{ day: CashDay }>(`/staff/day/${date}/reopen`, { method: 'POST' }),
+
+    duty: (from: string) => request<{ duty: DutyDay[] }>(`/staff/duty?from=${from}&days=14`),
+
+    setDuty: (date: string, masterId: string | null, from: string) =>
+      request<{ duty: DutyDay[] }>(`/staff/duty/${date}?from=${from}`, {
+        method: 'PUT',
+        body: JSON.stringify({ masterId }),
+      }),
+
+    fillRotation: (from: string) =>
+      request<{ duty: DutyDay[] }>('/staff/duty/rotation', {
+        method: 'POST',
+        body: JSON.stringify({ from, days: 14 }),
+      }),
+
+    masters: () => request<{ masters: StaffMaster[] }>('/staff/masters'),
+
+    updateMaster: (id: string, patch: { percent?: number | null; phone?: string }) =>
+      request<{ masters: StaffMaster[] }>(`/staff/masters/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  },
+
   admin: {
     session: () => request<{ authenticated: boolean; enabled: boolean }>('/admin/session'),
 
@@ -232,6 +268,63 @@ export const api = {
       }),
   },
 };
+
+export interface StaffRole {
+  isAdmin: boolean;
+  masterId: string | null;
+  masterName: string | null;
+}
+
+export interface DutyDay {
+  date: string;
+  masterId: string | null;
+  masterName: string | null;
+}
+
+export interface CashEntry {
+  id: number;
+  masterId: string;
+  masterName: string;
+  service: string;
+  price: number;
+  author: string;
+  time: string;
+}
+
+export interface CashMasterTotal {
+  masterId: string;
+  masterName: string;
+  clients: number;
+  revenue: number;
+  percent: number | null;
+  owed: number;
+  earned: number;
+}
+
+export interface CashDay {
+  date: string;
+  duty: DutyDay;
+  closed: boolean;
+  closedAt: string | null;
+  canWrite: boolean;
+  entries: CashEntry[];
+  report: {
+    date: string;
+    dutyMasterName: string | null;
+    masters: CashMasterTotal[];
+    clients: number;
+    revenue: number;
+    owed: number;
+  };
+}
+
+export interface StaffMaster {
+  id: string;
+  name: string;
+  percent: number | null;
+  phone: string | null;
+  connected: boolean;
+}
 
 export interface AdminClient {
   id: number;

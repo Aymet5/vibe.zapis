@@ -68,6 +68,17 @@ body {
 
 /* Мини-приложение MAX: ведёт себя как приложение, а не как страница. */
 .max-app {
+  /*
+   * Шрифт на ступень крупнее сайта: в телефоне мелкий текст читать тяжело.
+   * Меняем только размеры текста, отступы и сетка остаются прежними.
+   */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.1875rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.625rem;
+  font-size: var(--text-base);
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
@@ -77,8 +88,8 @@ body {
 .max-app textarea {
   -webkit-user-select: text;
   user-select: text;
-  /* 16px — иначе iOS увеличивает страницу при фокусе на поле. */
-  font-size: 16px;
+  /* Не меньше 16px — иначе iOS увеличивает страницу при фокусе на поле. */
+  font-size: 17px;
 }
 .max-app button:active {
   transform: scale(0.98);

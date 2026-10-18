@@ -96,6 +96,15 @@ export const env = {
     apiUrl: (optional('MAX_API_URL') ?? 'https://platform-api.max.ru').replace(/\/+$/, ''),
   },
 
+  /**
+   * Телефоны администраторов кассы: они назначают дежурных, проценты мастеров
+   * и получают итог дня. Узнаём их по номеру, который MAX передал в мини-приложение.
+   */
+  staffAdminPhones: (optional('STAFF_ADMIN_PHONES') ?? '89991792895,89911149706')
+    .split(',')
+    .map((phone) => phone.trim())
+    .filter(Boolean),
+
   /** За сколько часов до визита бот присылает напоминание. */
   reminderHoursBefore: number('REMINDER_HOURS_BEFORE', 3),
   /** Часовой пояс салона в минутах от UTC. Кызыл — UTC+7. */

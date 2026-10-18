@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "check:loyalty": "tsx scripts/check-loyalty.ts"
+    "check:loyalty": "tsx scripts/check-loyalty.ts",
+    "check:cashbook": "tsx scripts/check-cashbook.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
