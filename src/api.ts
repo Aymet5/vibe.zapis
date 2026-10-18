@@ -130,6 +130,9 @@ export const api = {
     deleteEntry: (id: number, date: string) =>
       request<{ day: CashDay }>(`/staff/entries/${id}?date=${date}`, { method: 'DELETE' }),
 
+    /** Завершить смену — бот сразу рассылает итог. */
+    finishShift: (date: string) => request<{ day: CashDay }>(`/staff/day/${date}/finish`, { method: 'POST' }),
+
     duty: (from: string) => request<{ duty: DutyDay[] }>(`/staff/duty?from=${from}&days=14`),
 
     setDuty: (date: string, masterId: string | null, from: string) =>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Clock, Percent, Trash2, Users, Wallet, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Clock, Flag, Percent, Trash2, Users, Wallet, X } from 'lucide-react';
 import { CATEGORIES, SERVICES, type CategoryId } from '../../shared/catalog';
 import type { PublicMaster } from '../../shared/types';
 import { api, type CashDay, type DutyDay, type MasterDebt, type StaffMaster, type StaffRole } from '../api';
@@ -9,8 +9,8 @@ import { haptic } from '../lib/maxApp';
 
 /**
  * Касса дня для сотрудников — вместо тетради. Дежурный и администратор
- * записывают каждого клиента. Итог виден сразу, а в конце дня бот сам
- * рассылает, кто сколько должен.
+ * записывают каждого клиента. Итог виден сразу, а когда смену завершают,
+ * бот рассылает, кто сколько должен.
  */
 
 type Section = 'cash' | 'debts' | 'duty' | 'masters';
@@ -71,6 +71,8 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
   const [date, setDate] = useState(today);
   const [day, setDay] = useState<CashDay | null>(null);
   const [error, setError] = useState('');
+  const [finishing, setFinishing] = useState(false);
+  const [armed, setArmed] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -83,8 +85,30 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
 
   useEffect(() => {
     setDay(null);
+    setArmed(false);
     void load();
   }, [load]);
+
+  /** Первое нажатие спрашивает подтверждение — итог уходит всем, и отменить его нельзя. */
+  const finish = async () => {
+    if (!armed) {
+      haptic('tap');
+      setArmed(true);
+      return;
+    }
+    setFinishing(true);
+    setError('');
+    try {
+      setDay((await api.staff.finishShift(date)).day);
+      haptic('success');
+    } catch (err) {
+      haptic('error');
+      setError((err as Error).message);
+    } finally {
+      setFinishing(false);
+      setArmed(false);
+    }
+  };
 
   // Сегодняшняя касса обновляется сама: админ видит, что внёс дежурный, без перезапуска.
   useEffect(() => {
@@ -137,13 +161,29 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
 
           <EntryList day={day} onChange={setDay} />
 
-          {day.entries.length > 0 && (
+          {day.reportSentAt ? (
             <p className="flex items-center justify-center gap-2 text-sm text-text-muted text-center">
-              <Clock className="w-4 h-4 shrink-0" />
-              {day.reportSentAt
-                ? `Итог разослан в ${day.reportSentAt} — администраторам и мастерам в MAX`
-                : 'В 20:30 бот сам пришлёт итог администраторам и мастерам'}
+              <Check className="w-4 h-4 shrink-0 text-money" />
+              Смена завершена в {day.reportSentAt}, итог разослан администраторам и мастерам
             </p>
+          ) : (
+            day.canWrite && (
+              <div className="space-y-2 pt-2">
+                <Button
+                  onClick={() => void finish()}
+                  loading={finishing}
+                  variant={armed ? 'primary' : 'ghost'}
+                  className="w-full py-4 text-lg"
+                >
+                  <Flag className="w-5 h-5" />
+                  {armed ? 'Нажмите ещё раз — отправить итог' : 'Завершить смену'}
+                </Button>
+                <p className="flex items-center justify-center gap-2 text-sm text-text-muted text-center">
+                  <Clock className="w-4 h-4 shrink-0" />
+                  Итог уйдёт админам и мастерам. Если забыть — бот отправит сам в 19:00.
+                </p>
+              </div>
+            )
           )}
         </>
       )}

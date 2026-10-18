@@ -13,6 +13,7 @@ import {
   deleteEntry,
   dutyFor,
   fillDutyRotation,
+  finishShift,
   phoneKey,
   sendDayReport,
   setDuty,
@@ -107,7 +108,9 @@ async function main() {
   assert.equal(masterDebt(m1.id).balance, 0);
 
   // Итог видно сразу, без закрытия дня. После рассылки дежурный уже не правит, админ — может.
-  await sendDayReport(today, null);
+  // Мастер не на дежурстве смену не завершает, дежурный — да.
+  await assert.rejects(finishShift(otherRole, other.id, today), /дежурный или администратор/);
+  await finishShift(dutyRole, duty.id, today);
   assert.ok(dayView(adminRole, today).reportSentAt);
   assert.equal(dayView(dutyRole, today).canWrite, false);
   assert.throws(() => addEntry(dutyRole, duty.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 }), /уже отправлен/);

@@ -8,7 +8,7 @@ import { addDays, formatDateHuman, isValidDate, salonMinutesOfDay, salonToday } 
 /**
  * Касса дня вместо тетради. Дежурный мастер и администраторы вносят каждого
  * клиента: мастер, услуга, цена. Администраторы видят итог в любой момент,
- * а в конце дня бот сам присылает его:
+ * а когда дежурный или администратор завершает смену, бот присылает его:
  * администраторам — кто сколько должен, мастерам — сколько заработали и сколько отдать.
  * Неотданное копится день за днём, пока администратор не подтвердит, что получил деньги.
  *
@@ -402,6 +402,14 @@ function writeDenied(role: StaffRole, date: string): string {
   return 'Записывать может дежурный сегодня или администратор';
 }
 
+/** Завершить смену может дежурный (сегодня) или администратор. */
+export async function finishShift(role: StaffRole, userId: number, date: string): Promise<void> {
+  assertDate(date);
+  if (reportSentAt(date)) throw new CashError('Смена уже завершена, итог отправлен', 409);
+  if (!canWrite(role, date)) throw new CashError('Завершить смену может дежурный или администратор', 403);
+  await sendDayReport(date, userId);
+}
+
 export interface DayView {
   date: string;
   duty: DutyView;
@@ -637,7 +645,7 @@ function masterReportText(report: DayReport, item: MasterTotal | undefined, debt
   return lines.join('\n');
 }
 
-/** Рассылает итог дня администраторам и мастерам. Один раз за день. */
+/** Завершает смену: рассылает итог дня администраторам и мастерам. Один раз за день. */
 export async function sendDayReport(date: string, byUserId: number | null): Promise<DayReport> {
   assertDate(date);
   if (reportSentAt(date)) throw new CashError('Итог дня уже отправлен', 409);
@@ -709,9 +717,9 @@ export function updateStaffMaster(masterId: string, patch: { percent?: unknown; 
 
 const DUTY_MORNING_FROM = 8 * 60 + 30;
 const DUTY_MORNING_TO = 11 * 60;
-/** Во сколько по салону бот рассылает итог дня. */
+/** Если смену забыли завершить, итог уходит сам в это время по салону. */
 const AUTO_CLOSE_SETTING = 'cash_auto_close_minutes';
-const AUTO_CLOSE_DEFAULT = 20 * 60 + 30;
+const AUTO_CLOSE_DEFAULT = 19 * 60;
 
 async function morningDuty(): Promise<void> {
   const minutes = salonMinutesOfDay();
@@ -741,7 +749,7 @@ async function morningDuty(): Promise<void> {
   }
 }
 
-/** Итог дней с записями: сегодняшний — после закрытия салона, пропущенные прошлые — сразу. */
+/** Незавершённые смены с записями: сегодняшняя — в 19:00 по Кызылу, пропущенные прошлые — сразу. */
 async function sendDueReports(): Promise<void> {
   const today = salonToday();
   const closeAt = Number(getSetting(AUTO_CLOSE_SETTING) ?? AUTO_CLOSE_DEFAULT);

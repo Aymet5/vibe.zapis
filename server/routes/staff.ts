@@ -10,6 +10,7 @@ import {
   dayView,
   deleteEntry,
   dutyRange,
+  finishShift,
   fillDutyRotation,
   setDuty,
   staffMasterViews,
@@ -104,6 +105,14 @@ staffRouter.delete(
   handle((req, res) => {
     deleteEntry(req.staff!, req.user!.id, Number(req.params.id));
     res.json({ day: dayView(req.staff!, String(req.query.date ?? salonToday())) });
+  }),
+);
+
+staffRouter.post(
+  '/day/:date/finish',
+  handle(async (req, res) => {
+    await finishShift(req.staff!, req.user!.id, req.params.date);
+    res.json({ day: dayView(req.staff!, req.params.date) });
   }),
 );
 
