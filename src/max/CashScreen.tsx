@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Percent, Send, Trash2, Users, Wallet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Percent, Trash2, Users, Wallet } from 'lucide-react';
 import { CATEGORIES, SERVICES, type CategoryId } from '../../shared/catalog';
 import type { PublicMaster } from '../../shared/types';
 import { api, type CashDay, type DutyDay, type StaffMaster, type StaffRole } from '../api';
@@ -9,7 +9,8 @@ import { haptic } from '../lib/maxApp';
 
 /**
  * Касса дня для сотрудников — вместо тетради. Дежурный и администратор
- * записывают каждого клиента, в конце дня бот рассылает, кто сколько должен.
+ * записывают каждого клиента. Итог виден сразу, а в конце дня бот сам
+ * рассылает, кто сколько должен.
  */
 
 type Section = 'cash' | 'duty' | 'masters';
@@ -62,8 +63,6 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
   const [date, setDate] = useState(today);
   const [day, setDay] = useState<CashDay | null>(null);
   const [error, setError] = useState('');
-  const [closing, setClosing] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -76,38 +75,15 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
 
   useEffect(() => {
     setDay(null);
-    setConfirmClose(false);
     void load();
   }, [load]);
 
-  const close = async () => {
-    if (!confirmClose) {
-      haptic('tap');
-      setConfirmClose(true);
-      return;
-    }
-    setClosing(true);
-    setError('');
-    try {
-      setDay((await api.staff.closeDay(date)).day);
-      haptic('success');
-    } catch (err) {
-      haptic('error');
-      setError((err as Error).message);
-    } finally {
-      setClosing(false);
-      setConfirmClose(false);
-    }
-  };
-
-  const reopen = async () => {
-    try {
-      setDay((await api.staff.reopenDay(date)).day);
-      haptic('success');
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
+  // Сегодняшняя касса обновляется сама: админ видит, что внёс дежурный, без перезапуска.
+  useEffect(() => {
+    if (date !== today) return;
+    const timer = setInterval(() => void load(), 30_000);
+    return () => clearInterval(timer);
+  }, [date, today, load]);
 
   return (
     <div className="space-y-4">
@@ -153,25 +129,13 @@ function CashDayScreen({ role, today, masters }: { role: StaffRole; today: strin
 
           <EntryList day={day} onChange={setDay} />
 
-          {day.closed ? (
-            <div className="rounded-3xl bg-surface p-4 space-y-3 text-center">
-              <p className="font-semibold flex items-center justify-center gap-2">
-                <Lock className="w-5 h-5 text-orange-500" /> День закрыт, итог отправлен
-              </p>
-              {role.isAdmin && (
-                <Button variant="ghost" onClick={() => void reopen()} className="w-full">
-                  Открыть заново, чтобы исправить
-                </Button>
-              )}
-            </div>
-          ) : (
-            (day.canWrite || role.isAdmin) &&
-            day.entries.length > 0 && (
-              <Button onClick={() => void close()} loading={closing} className="w-full py-4 text-lg">
-                <Send className="w-5 h-5" />
-                {confirmClose ? 'Нажмите ещё раз — отправить итог' : 'Закрыть день и отправить итог'}
-              </Button>
-            )
+          {day.entries.length > 0 && (
+            <p className="flex items-center justify-center gap-2 text-sm text-text-muted text-center">
+              <Clock className="w-4 h-4 shrink-0" />
+              {day.reportSentAt
+                ? `Итог разослан в ${day.reportSentAt} — администраторам и мастерам в MAX`
+                : 'В 20:30 бот сам пришлёт итог администраторам и мастерам'}
+            </p>
           )}
         </>
       )}

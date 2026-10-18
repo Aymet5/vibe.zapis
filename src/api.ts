@@ -130,10 +130,6 @@ export const api = {
     deleteEntry: (id: number, date: string) =>
       request<{ day: CashDay }>(`/staff/entries/${id}?date=${date}`, { method: 'DELETE' }),
 
-    closeDay: (date: string) => request<{ day: CashDay }>(`/staff/day/${date}/close`, { method: 'POST' }),
-
-    reopenDay: (date: string) => request<{ day: CashDay }>(`/staff/day/${date}/reopen`, { method: 'POST' }),
-
     duty: (from: string) => request<{ duty: DutyDay[] }>(`/staff/duty?from=${from}&days=14`),
 
     setDuty: (date: string, masterId: string | null, from: string) =>
@@ -304,8 +300,8 @@ export interface CashMasterTotal {
 export interface CashDay {
   date: string;
   duty: DutyDay;
-  closed: boolean;
-  closedAt: string | null;
+  /** Когда бот разослал итог, «20:30»; null — ещё не рассылал. */
+  reportSentAt: string | null;
   canWrite: boolean;
   entries: CashEntry[];
   report: {

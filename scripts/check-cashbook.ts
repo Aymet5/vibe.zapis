@@ -6,13 +6,12 @@
 import assert from 'node:assert/strict';
 import {
   addEntry,
-  closeDay,
   dayView,
   deleteEntry,
   dutyFor,
   fillDutyRotation,
   phoneKey,
-  reopenDay,
+  sendDayReport,
   setDuty,
   staffRole,
   updateStaffMaster,
@@ -87,17 +86,15 @@ async function main() {
   assert.ok(own.entries.every((entry) => entry.masterId === m2.id));
   assert.equal(own.report.masters.length, 1);
 
-  await closeDay(today, duty.id);
-  assert.equal(dayView(adminRole, today).closed, true);
+  // Итог видно сразу, без закрытия дня. После рассылки дежурный уже не правит, админ — может.
+  await sendDayReport(today, null);
+  assert.ok(dayView(adminRole, today).reportSentAt);
   assert.equal(dayView(dutyRole, today).canWrite, false);
-  assert.throws(() => addEntry(adminRole, admin.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 }), /закрыт/);
-  await assert.rejects(closeDay(today, admin.id), /уже закрыт/);
-
-  // Процент поменяли после закрытия — отправленный итог не меняется.
-  updateStaffMaster(m1.id, { percent: 50 });
-  assert.equal(dayView(adminRole, today).report.owed, 700);
-  reopenDay(today);
+  assert.throws(() => addEntry(dutyRole, duty.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 }), /уже отправлен/);
+  await assert.rejects(sendDayReport(today, null), /уже отправлен/);
   addEntry(adminRole, admin.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 });
+  // Процент поменяли — администратор сразу видит пересчёт.
+  updateStaffMaster(m1.id, { percent: 50 });
   assert.equal(dayView(adminRole, today).report.owed, Math.floor(1601 * 0.5) + 300);
 
   // Очередь: после m1 сегодня завтра дежурит следующий по порядку.

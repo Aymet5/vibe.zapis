@@ -3,12 +3,10 @@ import { requireClient } from '../auth';
 import {
   CashError,
   addEntry,
-  closeDay,
   dayView,
   deleteEntry,
   dutyRange,
   fillDutyRotation,
-  reopenDay,
   setDuty,
   staffMasterViews,
   staffRole,
@@ -102,29 +100,6 @@ staffRouter.delete(
   handle((req, res) => {
     deleteEntry(req.staff!, req.user!.id, Number(req.params.id));
     res.json({ day: dayView(req.staff!, String(req.query.date ?? salonToday())) });
-  }),
-);
-
-staffRouter.post(
-  '/day/:date/close',
-  handle(async (req, res) => {
-    const date = req.params.date;
-    const view = dayView(req.staff!, date);
-    if (!view.canWrite && !req.staff!.isAdmin) {
-      res.status(403).json({ error: 'Закрыть день может дежурный или администратор' });
-      return;
-    }
-    await closeDay(date, req.user!.id);
-    res.json({ day: dayView(req.staff!, date) });
-  }),
-);
-
-staffRouter.post(
-  '/day/:date/reopen',
-  requireStaffAdmin,
-  handle((req, res) => {
-    reopenDay(req.params.date);
-    res.json({ day: dayView(req.staff!, req.params.date) });
   }),
 );
 

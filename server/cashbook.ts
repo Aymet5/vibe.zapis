@@ -7,7 +7,8 @@ import { addDays, formatDateHuman, isValidDate, salonMinutesOfDay, salonToday } 
 
 /**
  * Касса дня вместо тетради. Дежурный мастер и администраторы вносят каждого
- * клиента: мастер, услуга, цена. В конце дня бот присылает итог:
+ * клиента: мастер, услуга, цена. Администраторы видят итог в любой момент,
+ * а в конце дня бот сам присылает его:
  * администраторам — кто сколько должен, мастерам — сколько заработали и сколько отдать.
  *
  * Сотрудников узнаём по телефону, который MAX передал в мини-приложение:
@@ -39,11 +40,7 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_cash_date ON cash_entries (date, master_id);
 
-  /*
-   * Закрытый день: итог, который ушёл в сообщениях, хранится как был.
-   * Открытый заново день остаётся строкой с closed_at = NULL — его уже
-   * не закрывает расписание, только человек.
-   */
+  /* Итог дня, который бот разослал в конце дня, — каким он ушёл в сообщениях. */
   CREATE TABLE IF NOT EXISTS cash_days (
     date TEXT PRIMARY KEY,
     closed_at TEXT,
@@ -336,24 +333,38 @@ export function buildReport(date: string): DayReport {
   };
 }
 
-function closedDay(date: string): { closedAt: string; report: DayReport } | null {
-  const row = db.prepare('SELECT closed_at, report FROM cash_days WHERE date = ? AND closed_at IS NOT NULL').get(date) as
-    | { closed_at: string; report: string }
+/** Когда бот разослал итог дня, null — ещё не рассылал. */
+function reportSentAt(date: string): string | null {
+  const row = db.prepare('SELECT closed_at FROM cash_days WHERE date = ? AND closed_at IS NOT NULL').get(date) as
+    | { closed_at: string }
     | undefined;
-  return row ? { closedAt: row.closed_at, report: JSON.parse(row.report) as DayReport } : null;
+  return row?.closed_at ?? null;
 }
 
-/** Писать в кассу дня могут администраторы и дежурный — только сегодня и пока день открыт. */
+/** Дежурный ведёт кассу этого дня — ему видны все клиенты, а не только свои. */
+function isDutyOf(role: StaffRole, date: string): boolean {
+  return Boolean(role.masterId) && dutyFor(date).masterId === role.masterId;
+}
+
+/**
+ * Администратор правит кассу любого дня. Дежурный — только сегодня и пока
+ * итог не разослан: иначе мастера получили бы одни цифры, а в кассе были бы другие.
+ */
 function canWrite(role: StaffRole, date: string): boolean {
   if (role.isAdmin) return true;
-  return date === salonToday() && Boolean(role.masterId) && dutyFor(date).masterId === role.masterId;
+  return date === salonToday() && isDutyOf(role, date) && !reportSentAt(date);
+}
+
+function writeDenied(role: StaffRole, date: string): string {
+  if (isDutyOf(role, date) && reportSentAt(date)) return 'Итог дня уже отправлен — исправить может администратор';
+  return 'Записывать может дежурный сегодня или администратор';
 }
 
 export interface DayView {
   date: string;
   duty: DutyView;
-  closed: boolean;
-  closedAt: string | null;
+  /** Время по салону, когда бот разослал итог, «20:30»; null — ещё не рассылал. */
+  reportSentAt: string | null;
   canWrite: boolean;
   /** Мастеру, который не дежурит, видны только его клиенты. */
   entries: CashEntryView[];
@@ -362,16 +373,15 @@ export interface DayView {
 
 export function dayView(role: StaffRole, date: string): DayView {
   assertDate(date);
-  const closed = closedDay(date);
-  const writable = canWrite(role, date);
-  const seesAll = role.isAdmin || writable;
-  const report = closed?.report ?? buildReport(date);
+  const sentAt = reportSentAt(date);
+  const seesAll = role.isAdmin || isDutyOf(role, date);
+  // Итог всегда по текущим записям: администратор видит его в любой момент.
+  const report = buildReport(date);
   return {
     date,
     duty: dutyFor(date),
-    closed: Boolean(closed),
-    closedAt: closed?.closedAt ?? null,
-    canWrite: writable && !closed,
+    reportSentAt: sentAt ? salonTime(sentAt) : null,
+    canWrite: canWrite(role, date),
     entries: entries(date)
       .filter((row) => seesAll || row.master_id === role.masterId)
       .map(toEntryView)
@@ -386,8 +396,7 @@ export function addEntry(
   input: { date: string; masterId: string; service: string; price: number },
 ): void {
   assertDate(input.date);
-  if (!canWrite(role, input.date)) throw new CashError('Записывать сегодня может дежурный или администратор', 403);
-  if (closedDay(input.date)) throw new CashError('День уже закрыт. Администратор может открыть его заново', 409);
+  if (!canWrite(role, input.date)) throw new CashError(writeDenied(role, input.date), 403);
   if (!getMaster(input.masterId)?.active) throw new CashError('Выберите мастера');
   const service = String(input.service ?? '').trim().replace(/\s+/g, ' ');
   if (!service) throw new CashError('Укажите услугу');
@@ -410,8 +419,7 @@ export function deleteEntry(role: StaffRole, userId: number, id: number): void {
     | CashEntryRow
     | undefined;
   if (!row) throw new CashError('Запись не найдена', 404);
-  if (!canWrite(role, row.date)) throw new CashError('Удалять может дежурный или администратор', 403);
-  if (closedDay(row.date)) throw new CashError('День уже закрыт. Администратор может открыть его заново', 409);
+  if (!canWrite(role, row.date)) throw new CashError(writeDenied(role, row.date), 403);
   db.prepare(`UPDATE cash_entries SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?`).run(userId, id);
 }
 
@@ -447,10 +455,10 @@ function masterReportText(report: DayReport, item: MasterTotal): string {
   return lines.join('\n');
 }
 
-/** Закрывает день и рассылает итог. Повторно закрыть нельзя — сначала открыть заново. */
-export async function closeDay(date: string, byUserId: number | null): Promise<DayReport> {
+/** Рассылает итог дня администраторам и мастерам. Один раз за день. */
+export async function sendDayReport(date: string, byUserId: number | null): Promise<DayReport> {
   assertDate(date);
-  if (closedDay(date)) throw new CashError('День уже закрыт', 409);
+  if (reportSentAt(date)) throw new CashError('Итог дня уже отправлен', 409);
   const report = buildReport(date);
   db.prepare(
     `INSERT INTO cash_days (date, closed_at, closed_by, report) VALUES (?, datetime('now'), ?, ?)
@@ -466,11 +474,6 @@ export async function closeDay(date: string, byUserId: number | null): Promise<D
     await sendToMaster(item.masterId, masterReportText(report, item));
   }
   return report;
-}
-
-export function reopenDay(date: string): void {
-  assertDate(date);
-  db.prepare('UPDATE cash_days SET closed_at = NULL WHERE date = ?').run(date);
 }
 
 // ─── Мастера: процент и телефон ───
@@ -521,7 +524,7 @@ export function updateStaffMaster(masterId: string, patch: { percent?: unknown; 
 
 const DUTY_MORNING_FROM = 8 * 60 + 30;
 const DUTY_MORNING_TO = 11 * 60;
-/** Если дежурный не закрыл кассу сам, итог уходит в это время. */
+/** Во сколько по салону бот рассылает итог дня. */
 const AUTO_CLOSE_SETTING = 'cash_auto_close_minutes';
 const AUTO_CLOSE_DEFAULT = 20 * 60 + 30;
 
@@ -539,7 +542,7 @@ async function morningDuty(): Promise<void> {
   const name = masterName(row.master_id);
   await sendToMaster(
     row.master_id,
-    `Доброе утро! Сегодня вы дежурный. Записывайте в кассу каждого клиента, в конце дня нажмите «Закрыть день».`,
+    `Доброе утро! Сегодня вы дежурный. Записывайте в кассу каждого клиента — вечером бот сам пришлёт итог.`,
   );
   if (maxToken()) {
     await Promise.all(
@@ -550,8 +553,8 @@ async function morningDuty(): Promise<void> {
   }
 }
 
-/** Незакрытые дни с записями: сегодняшний — после закрытия салона, прошедшие — сразу. */
-async function autoClose(): Promise<void> {
+/** Итог дней с записями: сегодняшний — после закрытия салона, пропущенные прошлые — сразу. */
+async function sendDueReports(): Promise<void> {
   const today = salonToday();
   const closeAt = Number(getSetting(AUTO_CLOSE_SETTING) ?? AUTO_CLOSE_DEFAULT);
   const open = db
@@ -566,15 +569,15 @@ async function autoClose(): Promise<void> {
   for (const { date } of open) {
     if (date === today && salonMinutesOfDay() < closeAt) continue;
     try {
-      await closeDay(date, null);
-      console.info(`[cash] день ${date} закрыт автоматически`);
+      await sendDayReport(date, null);
+      console.info(`[cash] итог за ${date} разослан`);
     } catch (error) {
-      console.warn(`[cash] не удалось закрыть день ${date}:`, (error as Error).message);
+      console.warn(`[cash] не удалось разослать итог за ${date}:`, (error as Error).message);
     }
   }
 }
 
 export async function cashbookTick(): Promise<void> {
   await morningDuty();
-  await autoClose();
+  await sendDueReports();
 }
