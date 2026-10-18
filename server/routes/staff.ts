@@ -154,7 +154,7 @@ staffRouter.get(
     res.json({
       masters: req.staff!.isAdmin
         ? masters
-        : masters.map((master) => ({ ...master, percent: null, phone: null, connected: false })),
+        : masters.map((master) => ({ ...master, percent: null, phone: null, linked: null, candidates: [] })),
     });
   }),
 );
@@ -163,7 +163,11 @@ staffRouter.patch(
   '/masters/:id',
   requireStaffAdmin,
   handle((req, res) => {
-    updateStaffMaster(req.params.id, { percent: req.body?.percent, phone: req.body?.phone });
+    updateStaffMaster(req.params.id, {
+      percent: req.body?.percent,
+      phone: req.body?.phone,
+      userId: req.body?.userId,
+    });
     res.json({ masters: staffMasterViews() });
   }),
 );

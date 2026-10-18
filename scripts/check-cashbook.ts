@@ -46,10 +46,20 @@ async function main() {
   assert.equal(staffRole(admin)?.isAdmin, true);
   assert.equal(staffRole(admin2)?.isAdmin, true);
   assert.equal(staffRole(client), null);
-  assert.equal(staffRole(duty), null, 'без телефона в карточке мастер не сотрудник');
+  assert.equal(staffRole(duty), null, 'без привязки мастер не сотрудник');
+
+  // Кто позже впишет себе номер администратора, админом не станет.
+  const impostor = user('x1', '+7 (999) 179-28-95');
+  assert.equal(staffRole(impostor), null);
 
   updateStaffMaster(m1.id, { percent: 40, phone: '8 900 111 22 33' });
   updateStaffMaster(m2.id, { percent: 30, phone: '+79004445566' });
+  // Одного номера мало — мастера привязывает администратор, и только подходящий по номеру аккаунт.
+  assert.equal(staffRole(duty), null);
+  assert.throws(() => updateStaffMaster(m1.id, { userId: client.id }), /не подходит/);
+  updateStaffMaster(m1.id, { userId: duty.id });
+  updateStaffMaster(m2.id, { userId: other.id });
+  assert.throws(() => addEntry(staffRole(admin)!, admin.id, { date: addDays(today, 1), masterId: m1.id, service: 'Фейд', price: 600 }), /будущий/);
   assert.throws(() => updateStaffMaster(m2.id, { phone: '89001112233' }), /уже у мастера/);
   assert.throws(() => updateStaffMaster(m2.id, { percent: 150 }), /от 0 до 100/);
 

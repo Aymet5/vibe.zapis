@@ -743,8 +743,8 @@ function PercentScreen() {
   return (
     <div className="space-y-4">
       <p className="text-text-muted">
-        Процент — сколько мастер отдаёт администратору с выручки. Пусто — мастер не на процентах. По телефону бот
-        узнаёт мастера в MAX и присылает ему итог дня.
+        Процент — сколько мастер отдаёт администратору с выручки. Пусто — мастер не на процентах. Впишите телефон
+        мастера, сохраните и привяжите его аккаунт MAX — тогда бот будет присылать ему итог дня.
       </p>
       {masters.map((master) => (
         <MasterCard key={master.id} master={master} onSaved={setMasters} />
@@ -759,6 +759,17 @@ function MasterCard({ master, onSaved }: { master: StaffMaster; onSaved: (master
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+
+  const link = async (userId: number | null) => {
+    setError('');
+    try {
+      onSaved((await api.staff.updateMaster(master.id, { userId })).masters);
+      haptic('success');
+    } catch (err) {
+      haptic('error');
+      setError((err as Error).message);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -782,8 +793,8 @@ function MasterCard({ master, onSaved }: { master: StaffMaster; onSaved: (master
     <div className="rounded-3xl bg-surface p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-lg font-black">{master.name}</p>
-        <span className={`text-sm font-semibold ${master.connected ? 'text-emerald-500' : 'text-text-muted'}`}>
-          {master.connected ? 'в MAX подключён' : master.phone ? 'ещё не открывал приложение' : 'телефон не указан'}
+        <span className={`text-sm font-semibold ${master.linked ? 'text-money' : 'text-text-muted'}`}>
+          {master.linked ? 'подключён' : 'не подключён'}
         </span>
       </div>
       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
@@ -810,6 +821,35 @@ function MasterCard({ master, onSaved }: { master: StaffMaster; onSaved: (master
       <Button onClick={() => void save()} loading={saving} className="w-full">
         {saved ? 'Сохранено' : 'Сохранить'}
       </Button>
+
+      {/* Привязка — только по нажатию администратора: номер в профиле MAX может вписать кто угодно. */}
+      {master.linked ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <span className="min-w-0 truncate">
+            <span className="text-text-muted">В MAX: </span>
+            <span className="font-semibold">{master.linked.name}</span>
+          </span>
+          <button type="button" onClick={() => void link(null)} className="text-sm font-semibold text-red-400 shrink-0">
+            Отвязать
+          </button>
+        </div>
+      ) : master.candidates.length > 0 ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-sm text-text-muted">С этим номером в MAX — проверьте, что это сам мастер:</p>
+          {master.candidates.map((candidate) => (
+            <Button key={candidate.userId} variant="ghost" onClick={() => void link(candidate.userId)} className="w-full">
+              Привязать: {candidate.name}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        master.phone && (
+          <p className="border-t border-border pt-3 text-sm text-text-muted">
+            С этим номером в MAX пока никого. Пусть мастер откроет бота и поделится номером, затем обновите эту
+            вкладку.
+          </p>
+        )
+      )}
     </div>
   );
 }

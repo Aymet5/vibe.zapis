@@ -159,7 +159,7 @@ export const api = {
 
     masters: () => request<{ masters: StaffMaster[] }>('/staff/masters'),
 
-    updateMaster: (id: string, patch: { percent?: number | null; phone?: string }) =>
+    updateMaster: (id: string, patch: { percent?: number | null; phone?: string; userId?: number | null }) =>
       request<{ masters: StaffMaster[] }>(`/staff/masters/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   },
 
@@ -340,7 +340,8 @@ export interface StaffMaster {
   name: string;
   percent: number | null;
   phone: string | null;
-  connected: boolean;
+  linked: { userId: number; name: string } | null;
+  candidates: { userId: number; name: string }[];
 }
 
 export interface AdminClient {

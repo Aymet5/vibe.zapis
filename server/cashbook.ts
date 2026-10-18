@@ -1,4 +1,4 @@
-import { db, getSetting, type UserRow } from './db';
+import { db, getSetting, setSetting, type UserRow } from './db';
 import { env } from './env';
 import { activeMasters, getMaster, masterName } from './masters';
 import { miniAppLink, sendToMaxChat, sendToMaxUser, maxToken } from './max';
@@ -12,8 +12,9 @@ import { addDays, formatDateHuman, isValidDate, salonMinutesOfDay, salonToday } 
  * администраторам — кто сколько должен, мастерам — сколько заработали и сколько отдать.
  * Неотданное копится день за днём, пока администратор не подтвердит, что получил деньги.
  *
- * Сотрудников узнаём по телефону, который MAX передал в мини-приложение:
- * администраторы — номера из STAFF_ADMIN_PHONES, мастер — номер в его карточке.
+ * Сотрудник — это конкретный аккаунт MAX, а не номер телефона: номер в профиле
+ * человек может вписать любой. Администратор закрепляется за первым аккаунтом
+ * MAX с номером из STAFF_ADMIN_PHONES, мастера привязывает администратор.
  */
 
 db.exec(`
@@ -80,6 +81,10 @@ if (!masterColumns.some((column) => column.name === 'percent')) {
 if (!masterColumns.some((column) => column.name === 'phone')) {
   db.exec('ALTER TABLE masters ADD COLUMN phone TEXT');
 }
+// Аккаунт MAX мастера (users.id), который привязал администратор. Телефон — только подсказка, кого искать.
+if (!masterColumns.some((column) => column.name === 'staff_user_id')) {
+  db.exec('ALTER TABLE masters ADD COLUMN staff_user_id INTEGER');
+}
 
 export class CashError extends Error {
   constructor(
@@ -100,17 +105,55 @@ function adminPhoneKeys(): string[] {
   return env.staffAdminPhones.map(phoneKey).filter((key): key is string => Boolean(key));
 }
 
+const ADMINS_SETTING = 'staff_admin_users';
+
+/**
+ * Какой аккаунт MAX закреплён за каждым номером администратора: { «9991792895»: users.id }.
+ * Номер закрепляется один раз — за первым, кто вошёл в MAX с этим номером.
+ * Кто впишет тот же номер в профиль позже, администратором не станет.
+ */
+function adminBindings(): Record<string, number> {
+  let saved: Record<string, number> = {};
+  try {
+    saved = JSON.parse(getSetting(ADMINS_SETTING) ?? '{}') as Record<string, number>;
+  } catch {
+    // Испорченная настройка — закрепим заново.
+  }
+  let changed = false;
+  for (const key of adminPhoneKeys()) {
+    if (saved[key]) continue;
+    const user = maxUsersByPhone(key).sort((a, b) => a.id - b.id)[0];
+    if (user) {
+      saved[key] = user.id;
+      changed = true;
+    }
+  }
+  if (changed) setSetting(ADMINS_SETTING, JSON.stringify(saved));
+  return saved;
+}
+
+function adminUserIds(): number[] {
+  const keys = adminPhoneKeys();
+  return Object.entries(adminBindings())
+    .filter(([key]) => keys.includes(key))
+    .map(([, userId]) => userId);
+}
+
 interface StaffMasterRow {
   id: string;
   name: string;
   percent: number | null;
   phone: string | null;
+  staff_user_id: number | null;
 }
 
 function staffMasters(): StaffMasterRow[] {
   const ids = new Set(activeMasters().map((master) => master.id));
-  return (db.prepare('SELECT id, name, percent, phone FROM masters ORDER BY sort, created_at').all() as StaffMasterRow[])
-    .filter((row) => ids.has(row.id));
+  return (
+    db
+      .prepare('SELECT id, name, percent, phone, staff_user_id FROM masters ORDER BY sort, created_at')
+      .all() as StaffMasterRow[]
+  ).filter((row) => ids.has(row.id));
 }
 
 export interface StaffRole {
@@ -121,10 +164,9 @@ export interface StaffRole {
 }
 
 export function staffRole(user: UserRow | undefined): StaffRole | null {
-  const key = phoneKey(user?.phone);
-  if (!key) return null;
-  const isAdmin = adminPhoneKeys().includes(key);
-  const master = staffMasters().find((row) => phoneKey(row.phone) === key);
+  if (!user?.max_id) return null;
+  const isAdmin = adminUserIds().includes(user.id);
+  const master = staffMasters().find((row) => row.staff_user_id === user.id);
   if (!isAdmin && !master) return null;
   return { isAdmin, masterId: master?.id ?? null, masterName: master?.name ?? null };
 }
@@ -138,11 +180,15 @@ function maxUsersByPhone(phone: string | null): UserRow[] {
   );
 }
 
+function userById(id: number | null): UserRow | undefined {
+  if (!id) return undefined;
+  return db.prepare('SELECT * FROM users WHERE id = ? AND max_id IS NOT NULL').get(id) as UserRow | undefined;
+}
+
 function adminMaxUsers(): UserRow[] {
-  const keys = adminPhoneKeys();
-  return (db.prepare('SELECT * FROM users WHERE max_id IS NOT NULL AND phone IS NOT NULL').all() as UserRow[]).filter(
-    (user) => keys.includes(phoneKey(user.phone) ?? ''),
-  );
+  return adminUserIds()
+    .map(userById)
+    .filter((user): user is UserRow => Boolean(user));
 }
 
 async function sendToPeople(users: UserRow[], text: string): Promise<number> {
@@ -153,9 +199,14 @@ async function sendToPeople(users: UserRow[], text: string): Promise<number> {
   return results.filter(Boolean).length;
 }
 
-async function sendToMaster(masterId: string, text: string): Promise<number> {
+/** Почему мастеру не дошло; null — доставлено. */
+type Delivery = null | 'не подключён к боту' | 'MAX не принял сообщение';
+
+async function sendToMaster(masterId: string, text: string): Promise<Delivery> {
   const master = staffMasters().find((row) => row.id === masterId);
-  return sendToPeople(maxUsersByPhone(master?.phone ?? null), text);
+  const user = userById(master?.staff_user_id ?? null);
+  if (!user) return 'не подключён к боту';
+  return (await sendToPeople([user], text)) > 0 ? null : 'MAX не принял сообщение';
 }
 
 function pluralRu(count: number, one: string, few: string, many: string): string {
@@ -446,6 +497,7 @@ export function addEntry(
   input: { date: string; masterId: string; service: string; price: number },
 ): void {
   assertDate(input.date);
+  if (input.date > salonToday()) throw new CashError('Нельзя записать клиента на будущий день');
   if (!canWrite(role, input.date)) throw new CashError(writeDenied(role, input.date), 403);
   if (!getMaster(input.masterId)?.active) throw new CashError('Выберите мастера');
   const service = String(input.service ?? '').trim().replace(/\s+/g, ' ');
@@ -598,7 +650,7 @@ export function cancelPayment(paymentId: number): void {
   if (result.changes === 0) throw new CashError('Оплата не найдена', 404);
 }
 
-function adminReportText(report: DayReport): string {
+function adminReportText(report: DayReport, undelivered: { name: string; reason: string }[]): string {
   const lines = [`Касса за ${formatDateHuman(report.date)}`];
   if (report.dutyMasterName) lines.push(`Дежурный: ${report.dutyMasterName}`);
   lines.push('');
@@ -619,6 +671,10 @@ function adminReportText(report: DayReport): string {
     lines.push('', 'Не отдано с учётом прошлых дней:');
     for (const debt of debts) lines.push(`${debt.masterName}: ${debtLine(debt)}`);
     lines.push(`Итого ждём: ${rub(debts.reduce((sum, debt) => sum + debt.balance, 0))}`);
+  }
+  if (undelivered.length > 0) {
+    lines.push('', '⚠️ Мастерам не доставлено:');
+    for (const item of undelivered) lines.push(`${item.name} — ${item.reason}`);
   }
   return lines.join('\n');
 }
@@ -659,13 +715,17 @@ export async function sendDayReport(date: string, byUserId: number | null): Prom
     JSON.stringify(report),
   );
 
-  await sendToPeople(adminMaxUsers(), adminReportText(report));
-  // Каждому мастеру в личку: кто работал сегодня и кто ещё не отдал за прошлые дни.
+  // Сначала мастерам — чтобы администратор в своём отчёте увидел, кому не дошло.
+  // Каждому в личку: кто работал сегодня и кто ещё не отдал за прошлые дни.
+  const undelivered: { name: string; reason: string }[] = [];
   for (const debt of allDebts()) {
     const item = report.masters.find((master) => master.masterId === debt.masterId);
     if (!item && debt.balance <= 0) continue;
-    await sendToMaster(debt.masterId, masterReportText(report, item, debt));
+    const failure = await sendToMaster(debt.masterId, masterReportText(report, item, debt));
+    if (failure) undelivered.push({ name: debt.masterName, reason: failure });
   }
+  const delivered = await sendToPeople(adminMaxUsers(), adminReportText(report, undelivered));
+  if (delivered === 0) console.warn(`[cash] итог за ${date} не дошёл ни до одного администратора`);
   return report;
 }
 
@@ -676,22 +736,56 @@ export interface StaffMasterView {
   name: string;
   percent: number | null;
   phone: string | null;
-  /** Мастер уже открывал приложение в MAX с этим номером — сообщения дойдут. */
-  connected: boolean;
+  /** Привязанный аккаунт MAX — ему бот пишет и он видит кассу как мастер. */
+  linked: { userId: number; name: string } | null;
+  /** Кто в MAX с номером из карточки — их администратор может привязать. */
+  candidates: { userId: number; name: string }[];
+}
+
+function userName(user: UserRow): string {
+  return `${user.first_name} ${user.last_name}`.trim() || 'Без имени';
 }
 
 export function staffMasterViews(): StaffMasterView[] {
-  return staffMasters().map((row) => ({
-    id: row.id,
-    name: row.name,
-    percent: row.percent,
-    phone: row.phone,
-    connected: maxUsersByPhone(row.phone).length > 0,
-  }));
+  const taken = new Set(staffMasters().map((row) => row.staff_user_id).filter(Boolean));
+  return staffMasters().map((row) => {
+    const linked = userById(row.staff_user_id);
+    return {
+      id: row.id,
+      name: row.name,
+      percent: row.percent,
+      phone: row.phone,
+      linked: linked ? { userId: linked.id, name: userName(linked) } : null,
+      candidates: linked
+        ? []
+        : maxUsersByPhone(row.phone)
+            .filter((user) => !taken.has(user.id))
+            .map((user) => ({ userId: user.id, name: userName(user) })),
+    };
+  });
 }
 
-export function updateStaffMaster(masterId: string, patch: { percent?: unknown; phone?: unknown }): void {
+export function updateStaffMaster(
+  masterId: string,
+  patch: { percent?: unknown; phone?: unknown; userId?: unknown },
+): void {
   if (!getMaster(masterId)?.active) throw new CashError('Такого мастера нет', 404);
+
+  // Привязка аккаунта: только того, кто вошёл в MAX с номером из карточки мастера.
+  if (patch.userId !== undefined) {
+    if (patch.userId === null) {
+      db.prepare('UPDATE masters SET staff_user_id = NULL WHERE id = ?').run(masterId);
+    } else {
+      const master = staffMasters().find((row) => row.id === masterId);
+      const user = userById(Number(patch.userId));
+      if (!user || !master?.phone || phoneKey(user.phone) !== phoneKey(master.phone)) {
+        throw new CashError('Этот аккаунт MAX не подходит к номеру мастера');
+      }
+      const other = staffMasters().find((row) => row.id !== masterId && row.staff_user_id === user.id);
+      if (other) throw new CashError(`Этот аккаунт уже привязан к мастеру ${other.name}`);
+      db.prepare('UPDATE masters SET staff_user_id = ? WHERE id = ?').run(user.id, masterId);
+    }
+  }
 
   if (patch.percent !== undefined) {
     const raw = patch.percent === null || patch.percent === '' ? null : Number(patch.percent);
@@ -709,7 +803,12 @@ export function updateStaffMaster(masterId: string, patch: { percent?: unknown; 
       const taken = staffMasters().find((row) => row.id !== masterId && phoneKey(row.phone) === key);
       if (taken) throw new CashError(`Этот номер уже у мастера ${taken.name}`);
     }
+    const current = staffMasters().find((row) => row.id === masterId);
     db.prepare('UPDATE masters SET phone = ? WHERE id = ?').run(key ? `+7${key}` : null, masterId);
+    // Сменили номер — прежняя привязка к нему больше не относится.
+    if (phoneKey(current?.phone) !== key) {
+      db.prepare('UPDATE masters SET staff_user_id = NULL WHERE id = ?').run(masterId);
+    }
   }
 }
 
@@ -720,6 +819,27 @@ const DUTY_MORNING_TO = 11 * 60;
 /** Если смену забыли завершить, итог уходит сам в это время по салону. */
 const AUTO_CLOSE_SETTING = 'cash_auto_close_minutes';
 const AUTO_CLOSE_DEFAULT = 19 * 60;
+
+const EMPTY_ALERT_SETTING = 'cash_empty_alert_date';
+
+/**
+ * В 19:00 в кассе ни одного клиента — скорее всего, дежурный не записывал.
+ * Итога в такой день нет, поэтому предупреждаем администраторов отдельно.
+ */
+async function alertEmptyDay(): Promise<void> {
+  const today = salonToday();
+  const closeAt = Number(getSetting(AUTO_CLOSE_SETTING) ?? AUTO_CLOSE_DEFAULT);
+  if (salonMinutesOfDay() < closeAt || getSetting(EMPTY_ALERT_SETTING) === today) return;
+  if (reportSentAt(today) || entries(today).length > 0) return;
+  setSetting(EMPTY_ALERT_SETTING, today);
+
+  const duty = dutyFor(today).masterName;
+  await sendToPeople(
+    adminMaxUsers(),
+    `⚠️ За сегодня, ${formatDateHuman(today)}, в кассу не записано ни одного клиента.\n` +
+      (duty ? `Дежурный: ${duty}.` : 'Дежурный не был назначен.'),
+  );
+}
 
 async function morningDuty(): Promise<void> {
   const minutes = salonMinutesOfDay();
@@ -776,4 +896,5 @@ async function sendDueReports(): Promise<void> {
 export async function cashbookTick(): Promise<void> {
   await morningDuty();
   await sendDueReports();
+  await alertEmptyDay();
 }
