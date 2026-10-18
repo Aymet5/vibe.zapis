@@ -3,6 +3,10 @@ import { requireClient } from '../auth';
 import {
   CashError,
   addEntry,
+  allDebts,
+  cancelPayment,
+  confirmPayment,
+  masterDebt,
   dayView,
   deleteEntry,
   dutyRange,
@@ -152,5 +156,32 @@ staffRouter.patch(
   handle((req, res) => {
     updateStaffMaster(req.params.id, { percent: req.body?.percent, phone: req.body?.phone });
     res.json({ masters: staffMasterViews() });
+  }),
+);
+
+/** Долги: администратор видит всех, мастер — только свой. */
+staffRouter.get(
+  '/debts',
+  handle((req, res) => {
+    const role = req.staff!;
+    res.json({ debts: role.isAdmin ? allDebts() : role.masterId ? [masterDebt(role.masterId)] : [] });
+  }),
+);
+
+staffRouter.post(
+  '/debts/:masterId/payments',
+  requireStaffAdmin,
+  handle(async (req, res) => {
+    await confirmPayment(req.params.masterId, req.body?.amount, req.user!.id);
+    res.json({ debts: allDebts() });
+  }),
+);
+
+staffRouter.delete(
+  '/payments/:id',
+  requireStaffAdmin,
+  handle((req, res) => {
+    cancelPayment(Number(req.params.id));
+    res.json({ debts: allDebts() });
   }),
 );

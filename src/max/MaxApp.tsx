@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, Clock, Percent, Phone, Repeat, Scissors, User, Wallet } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Moon, Percent, Phone, Repeat, Scissors, Sun, User, Wallet } from 'lucide-react';
 import {
   BONUS_PER_VISIT,
   CATEGORIES,
@@ -32,6 +32,54 @@ import { CashScreen } from './CashScreen';
 type Tab = 'book' | 'bookings' | 'profile' | 'cash';
 
 const START_DONE_KEY = 'vibe:max-start-done';
+const THEME_KEY = 'vibe:max-theme';
+
+/** Тема, которую выбрали кнопкой в шапке; null — как в телефоне. */
+function savedTheme(): 'light' | 'dark' | null {
+  try {
+    const value = localStorage.getItem(THEME_KEY);
+    return value === 'light' || value === 'dark' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Светлая или тёмная тема. Пока не выбрали кнопкой — как в телефоне;
+ * выбор запоминается на этом устройстве.
+ */
+function useMaxTheme(): { isDark: boolean; toggle: () => void } {
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const [choice, setChoice] = useState(savedTheme);
+  const [systemDark, setSystemDark] = useState(media.matches);
+
+  useEffect(() => {
+    const onChange = () => setSystemDark(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isDark = choice ? choice === 'dark' : systemDark;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('max-root');
+    root.classList.toggle('dark', isDark);
+  }, [isDark]);
+
+  const toggle = () => {
+    const next = isDark ? 'light' : 'dark';
+    setChoice(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Без хранилища тема просто не запомнится до следующего запуска.
+    }
+  };
+
+  return { isDark, toggle };
+}
 
 /** Ссылка из бота (?startapp=…) срабатывает один раз за запуск. */
 function takeStartParam(): string | null {
@@ -72,14 +120,8 @@ export function MaxApp() {
     };
   }, [user?.phone]);
 
-  // Внутри MAX следуем теме телефона, а не сохранённой на сайте.
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => document.documentElement.classList.toggle('dark', media.matches);
-    apply();
-    media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
-  }, []);
+  // Внутри MAX своя тема: как в телефоне или выбранная кнопкой в шапке.
+  const theme = useMaxTheme();
 
   useEffect(() => {
     if (loading) return;
@@ -126,8 +168,21 @@ export function MaxApp() {
         <span className="text-xl font-black tracking-tighter">
           ВАЙБ<span className="text-orange-500">.</span>
         </span>
-        <span className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-sm font-bold text-orange-500">
-          <Percent className="w-3.5 h-3.5" /> {user.bonusPercent}%
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-sm font-bold text-orange-500">
+            <Percent className="w-3.5 h-3.5" /> {user.bonusPercent}%
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              haptic('tap');
+              theme.toggle();
+            }}
+            aria-label={theme.isDark ? 'Светлая тема' : 'Тёмная тема'}
+            className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-main"
+          >
+            {theme.isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
         </span>
       </header>
 

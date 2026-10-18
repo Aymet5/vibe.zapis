@@ -15,6 +15,7 @@
   --color-dropdown: var(--dropdown);
   --color-badge: var(--badge);
   --color-watermark: var(--watermark);
+  --color-money: var(--money);
 }
 
 @layer base {
@@ -31,6 +32,7 @@
     --dropdown: #ffffff;
     --badge: rgba(0, 0, 0, 0.05);
     --watermark: rgba(0, 0, 0, 0.05);
+    --money: #059669;
   }
 
   .dark {
@@ -46,6 +48,36 @@
     --dropdown: #141414;
     --badge: rgba(0, 0, 0, 0.3);
     --watermark: rgba(255, 255, 255, 0.05);
+    --money: #34d399;
+  }
+
+  /*
+   * Мини-приложение MAX: светлая тема с белыми карточками, тёмная — мягкая
+   * графитовая, а не почти чёрная, как на сайте.
+   */
+  .max-root {
+    --bg-main: #f1f2f5;
+    --surface: #ffffff;
+    --surface-hover: #f6f7f9;
+    --border: rgba(17, 24, 39, 0.1);
+    --badge: rgba(17, 24, 39, 0.07);
+    --glass: rgba(241, 242, 245, 0.85);
+    --text-muted: rgba(17, 24, 39, 0.62);
+  }
+
+  .max-root.dark {
+    --bg-main: #1c1e24;
+    --text-main: #f3f4f6;
+    --surface: #272a32;
+    --surface-hover: #30343d;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-light: rgba(255, 255, 255, 0.05);
+    --text-muted: rgba(243, 244, 246, 0.66);
+    --text-subtle: rgba(243, 244, 246, 0.85);
+    --glass: rgba(28, 30, 36, 0.85);
+    --dropdown: #272a32;
+    --badge: rgba(255, 255, 255, 0.07);
+    --money: #4ade80;
   }
 }
 
@@ -72,12 +104,12 @@ body {
    * Шрифт на ступень крупнее сайта: в телефоне мелкий текст читать тяжело.
    * Меняем только размеры текста, отступы и сетка остаются прежними.
    */
-  --text-xs: 0.8125rem;
-  --text-sm: 0.9375rem;
-  --text-base: 1.0625rem;
-  --text-lg: 1.1875rem;
-  --text-xl: 1.375rem;
-  --text-2xl: 1.625rem;
+  --text-xs: 0.875rem;
+  --text-sm: 1rem;
+  --text-base: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.75rem;
   font-size: var(--text-base);
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
@@ -89,7 +121,7 @@ body {
   -webkit-user-select: text;
   user-select: text;
   /* Не меньше 16px — иначе iOS увеличивает страницу при фокусе на поле. */
-  font-size: 17px;
+  font-size: 18px;
 }
 .max-app button:active {
   transform: scale(0.98);

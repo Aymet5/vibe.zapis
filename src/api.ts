@@ -144,6 +144,16 @@ export const api = {
         body: JSON.stringify({ from, days: 14 }),
       }),
 
+    debts: () => request<{ debts: MasterDebt[] }>('/staff/debts'),
+
+    confirmPayment: (masterId: string, amount: number) =>
+      request<{ debts: MasterDebt[] }>(`/staff/debts/${masterId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      }),
+
+    cancelPayment: (id: number) => request<{ debts: MasterDebt[] }>(`/staff/payments/${id}`, { method: 'DELETE' }),
+
     masters: () => request<{ masters: StaffMaster[] }>('/staff/masters'),
 
     updateMaster: (id: string, patch: { percent?: number | null; phone?: string }) =>
@@ -312,6 +322,14 @@ export interface CashDay {
     revenue: number;
     owed: number;
   };
+}
+
+export interface MasterDebt {
+  masterId: string;
+  masterName: string;
+  balance: number;
+  unpaidDays: { date: string; amount: number }[];
+  payments: { id: number; amount: number; date: string; time: string; receivedBy: string }[];
 }
 
 export interface StaffMaster {

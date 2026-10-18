@@ -10,6 +10,7 @@ import { addDays, formatDateHuman, isValidDate, salonMinutesOfDay, salonToday } 
  * клиента: мастер, услуга, цена. Администраторы видят итог в любой момент,
  * а в конце дня бот сам присылает его:
  * администраторам — кто сколько должен, мастерам — сколько заработали и сколько отдать.
+ * Неотданное копится день за днём, пока администратор не подтвердит, что получил деньги.
  *
  * Сотрудников узнаём по телефону, который MAX передал в мини-приложение:
  * администраторы — номера из STAFF_ADMIN_PHONES, мастер — номер в его карточке.
@@ -48,6 +49,28 @@ db.exec(`
     report TEXT NOT NULL
   );
 `);
+
+/*
+ * Деньги, которые мастер отдал администратору. Отменённая (ошибочная) отметка
+ * остаётся строкой с cancelled_at — для порядка.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS cash_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    master_id TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    received_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    cancelled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_cash_payments_master ON cash_payments (master_id);
+`);
+
+// Процент запоминаем в каждой записи: поменяли процент — прошлые долги не пересчитываются.
+const entryColumns = db.prepare('PRAGMA table_info(cash_entries)').all() as { name: string }[];
+if (!entryColumns.some((column) => column.name === 'percent')) {
+  db.exec('ALTER TABLE cash_entries ADD COLUMN percent INTEGER');
+}
 
 // Процент, который мастер отдаёт салону, и телефон, по которому он входит в MAX.
 const masterColumns = db.prepare('PRAGMA table_info(masters)').all() as { name: string }[];
@@ -133,6 +156,20 @@ async function sendToPeople(users: UserRow[], text: string): Promise<number> {
 async function sendToMaster(masterId: string, text: string): Promise<number> {
   const master = staffMasters().find((row) => row.id === masterId);
   return sendToPeople(maxUsersByPhone(master?.phone ?? null), text);
+}
+
+function pluralRu(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+/** «17, 18 и 19 октября» — дни, за которые не отдано. */
+function shortDates(dates: string[]): string {
+  const human = dates.map((date) => formatDateHuman(date).split(',')[0]);
+  return human.length > 1 ? `${human.slice(0, -1).join(', ')} и ${human[human.length - 1]}` : (human[0] ?? '');
 }
 
 function rub(amount: number): string {
@@ -222,6 +259,8 @@ interface CashEntryRow {
   master_id: string;
   service: string;
   price: number;
+  /** Процент мастера на момент записи; null — запись сделана до того, как его стали запоминать. */
+  percent: number | null;
   created_by: number | null;
   created_at: string;
 }
@@ -292,34 +331,45 @@ function toEntryView(row: CashEntryRow): CashEntryView {
   };
 }
 
-/** Итог дня по текущим процентам мастеров. */
-export function buildReport(date: string): DayReport {
-  const percents = new Map(
+function masterPercents(): Map<string, number | null> {
+  return new Map(
     (db.prepare('SELECT id, percent FROM masters').all() as { id: string; percent: number | null }[]).map((row) => [
       row.id,
       row.percent,
     ]),
   );
-  const byMaster = new Map<string, MasterTotal>();
+}
+
+/** Сколько отдать с суммы записей. Копейки округляем в пользу мастера. */
+function owedFor(rows: { price: number; percent: number }[]): number {
+  return Math.floor(rows.reduce((sum, row) => sum + row.price * row.percent, 0) / 100);
+}
+
+/** Итог дня. Процент — тот, что был у мастера в момент записи клиента. */
+export function buildReport(date: string): DayReport {
+  const percents = masterPercents();
+  const byMaster = new Map<string, { total: MasterTotal; rows: { price: number; percent: number }[] }>();
   for (const row of entries(date)) {
-    const total =
-      byMaster.get(row.master_id) ??
-      ({
+    const percent = row.percent ?? percents.get(row.master_id) ?? null;
+    const item = byMaster.get(row.master_id) ?? {
+      total: {
         masterId: row.master_id,
         masterName: masterName(row.master_id),
         clients: 0,
         revenue: 0,
-        percent: percents.get(row.master_id) ?? null,
+        percent,
         owed: 0,
         earned: 0,
-      } satisfies MasterTotal);
-    total.clients += 1;
-    total.revenue += row.price;
-    byMaster.set(row.master_id, total);
+      } satisfies MasterTotal,
+      rows: [],
+    };
+    item.total.clients += 1;
+    item.total.revenue += row.price;
+    item.rows.push({ price: row.price, percent: percent ?? 0 });
+    byMaster.set(row.master_id, item);
   }
-  const masters = [...byMaster.values()].map((total) => {
-    // Копейки округляем в пользу мастера.
-    const owed = total.percent ? Math.floor((total.revenue * total.percent) / 100) : 0;
+  const masters = [...byMaster.values()].map(({ total, rows }) => {
+    const owed = owedFor(rows);
     return { ...total, owed, earned: total.revenue - owed };
   });
   masters.sort((a, b) => b.revenue - a.revenue);
@@ -405,13 +455,9 @@ export function addEntry(
   if (!Number.isFinite(price) || price <= 0) throw new CashError('Укажите цену');
   if (price > 100_000) throw new CashError('Слишком большая цена — проверьте');
 
-  db.prepare('INSERT INTO cash_entries (date, master_id, service, price, created_by) VALUES (?, ?, ?, ?, ?)').run(
-    input.date,
-    input.masterId,
-    service,
-    price,
-    userId,
-  );
+  db.prepare(
+    'INSERT INTO cash_entries (date, master_id, service, price, percent, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(input.date, input.masterId, service, price, masterPercents().get(input.masterId) ?? null, userId);
 }
 
 export function deleteEntry(role: StaffRole, userId: number, id: number): void {
@@ -424,6 +470,133 @@ export function deleteEntry(role: StaffRole, userId: number, id: number): void {
 }
 
 // ─── Итог дня ───
+
+// ─── Долги мастеров ───
+
+export interface MasterDebt {
+  masterId: string;
+  masterName: string;
+  /** Сколько мастер сейчас должен администратору. */
+  balance: number;
+  /** Дни, за которые не отдано, — старые гасятся первыми. */
+  unpaidDays: { date: string; amount: number }[];
+  /** Последние подтверждённые оплаты. */
+  payments: { id: number; amount: number; date: string; time: string; receivedBy: string }[];
+}
+
+/**
+ * Долг копится за прошедшие дни и за сегодня, когда итог уже разослан:
+ * пока смена идёт, сегодняшние деньги ещё не «долг».
+ */
+function owedByDay(masterId: string): { date: string; amount: number }[] {
+  const today = salonToday();
+  const todayClosed = Boolean(reportSentAt(today));
+  const percents = masterPercents();
+  const rows = db
+    .prepare(
+      `SELECT date, price, percent FROM cash_entries
+       WHERE master_id = ? AND deleted_at IS NULL AND date <= ?
+       ORDER BY date`,
+    )
+    .all(masterId, today) as { date: string; price: number; percent: number | null }[];
+
+  const days = new Map<string, { price: number; percent: number }[]>();
+  for (const row of rows) {
+    if (row.date === today && !todayClosed) continue;
+    const list = days.get(row.date) ?? [];
+    list.push({ price: row.price, percent: row.percent ?? percents.get(masterId) ?? 0 });
+    days.set(row.date, list);
+  }
+  return [...days.entries()]
+    .map(([date, list]) => ({ date, amount: owedFor(list) }))
+    .filter((day) => day.amount > 0);
+}
+
+export function masterDebt(masterId: string): MasterDebt {
+  const days = owedByDay(masterId);
+  const { paid } = db
+    .prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM cash_payments WHERE master_id = ? AND cancelled_at IS NULL')
+    .get(masterId) as { paid: number };
+
+  // Оплата закрывает самые старые дни.
+  let left = paid;
+  const unpaidDays: { date: string; amount: number }[] = [];
+  for (const day of days) {
+    const covered = Math.min(day.amount, left);
+    left -= covered;
+    if (day.amount > covered) unpaidDays.push({ date: day.date, amount: day.amount - covered });
+  }
+
+  const payments = (
+    db
+      .prepare(
+        `SELECT id, amount, received_by, created_at FROM cash_payments
+         WHERE master_id = ? AND cancelled_at IS NULL ORDER BY id DESC LIMIT 5`,
+      )
+      .all(masterId) as { id: number; amount: number; received_by: number | null; created_at: string }[]
+  ).map((row) => ({
+    id: row.id,
+    amount: row.amount,
+    date: salonToday(new Date(`${row.created_at.replace(' ', 'T')}Z`)),
+    time: salonTime(row.created_at),
+    receivedBy: authorName(row.received_by),
+  }));
+
+  return {
+    masterId,
+    masterName: masterName(masterId),
+    balance: days.reduce((sum, day) => sum + day.amount, 0) - paid,
+    unpaidDays,
+    payments,
+  };
+}
+
+/** Долги работающих мастеров и тех, кто ушёл, но ещё должен. */
+export function allDebts(): MasterDebt[] {
+  const working = staffMasters().map((row) => row.id);
+  const ids = new Set(working);
+  const withEntries = db.prepare('SELECT DISTINCT master_id FROM cash_entries WHERE deleted_at IS NULL').all() as {
+    master_id: string;
+  }[];
+  for (const row of withEntries) ids.add(row.master_id);
+  return [...ids].map(masterDebt).filter((debt) => working.includes(debt.masterId) || debt.balance > 0);
+}
+
+function debtLine(debt: MasterDebt): string {
+  const days = debt.unpaidDays.length;
+  const dates = shortDates(debt.unpaidDays.map((day) => day.date));
+  return `${rub(debt.balance)} за ${days} ${pluralRu(days, 'день', 'дня', 'дней')} (${dates})`;
+}
+
+/** Администратор подтверждает, что мастер отдал деньги. */
+export async function confirmPayment(masterId: string, rawAmount: unknown, byUserId: number): Promise<MasterDebt> {
+  const debt = masterDebt(masterId);
+  const amount = Math.round(Number(rawAmount));
+  if (!Number.isFinite(amount) || amount <= 0) throw new CashError('Укажите сумму');
+  if (debt.balance <= 0) throw new CashError(`${debt.masterName} ничего не должен`);
+  if (amount > debt.balance) throw new CashError(`${debt.masterName} должен только ${rub(debt.balance)}`);
+
+  db.prepare('INSERT INTO cash_payments (master_id, amount, received_by) VALUES (?, ?, ?)').run(
+    masterId,
+    amount,
+    byUserId,
+  );
+  const after = masterDebt(masterId);
+  void sendToMaster(
+    masterId,
+    `Администратор подтвердил: получено ${rub(amount)}.\n` +
+      (after.balance > 0 ? `Осталось отдать: ${debtLine(after)}.` : 'Долгов больше нет, спасибо!'),
+  ).catch((error) => console.warn('[cash] не удалось сообщить об оплате:', (error as Error).message));
+  return after;
+}
+
+/** Ошибочная отметка об оплате — долг возвращается. */
+export function cancelPayment(paymentId: number): void {
+  const result = db
+    .prepare(`UPDATE cash_payments SET cancelled_at = datetime('now') WHERE id = ? AND cancelled_at IS NULL`)
+    .run(paymentId);
+  if (result.changes === 0) throw new CashError('Оплата не найдена', 404);
+}
 
 function adminReportText(report: DayReport): string {
   const lines = [`Касса за ${formatDateHuman(report.date)}`];
@@ -439,19 +612,36 @@ function adminReportText(report: DayReport): string {
           : `${item.masterName}: ${item.clients} кл., ${rub(item.revenue)} (не на процентах)`,
       );
     }
-    lines.push('', `Всего: ${report.clients} кл., ${rub(report.revenue)}`, `К сдаче администратору: ${rub(report.owed)}`);
+    lines.push('', `Всего: ${report.clients} кл., ${rub(report.revenue)}`, `За сегодня к сдаче: ${rub(report.owed)}`);
+  }
+  const debts = allDebts().filter((debt) => debt.balance > 0);
+  if (debts.length > 0) {
+    lines.push('', 'Не отдано с учётом прошлых дней:');
+    for (const debt of debts) lines.push(`${debt.masterName}: ${debtLine(debt)}`);
+    lines.push(`Итого ждём: ${rub(debts.reduce((sum, debt) => sum + debt.balance, 0))}`);
   }
   return lines.join('\n');
 }
 
-function masterReportText(report: DayReport, item: MasterTotal): string {
-  const lines = [
-    `Итог за ${formatDateHuman(report.date)}`,
-    `Клиентов: ${item.clients}, выручка ${rub(item.revenue)}.`,
-  ];
-  if (item.percent) {
-    lines.push(`Вы заработали ${rub(item.earned)}.`, `Вы должны администратору ${rub(item.owed)} (${item.percent}%).`);
+function masterReportText(report: DayReport, item: MasterTotal | undefined, debt: MasterDebt): string {
+  const lines = [`Итог за ${formatDateHuman(report.date)}`];
+  if (item) {
+    lines.push(`Клиентов: ${item.clients}, выручка ${rub(item.revenue)}.`);
+    if (item.percent) {
+      lines.push(
+        `Вы заработали ${rub(item.earned)}.`,
+        `За сегодня отдать администратору: ${rub(item.owed)} (${item.percent}%).`,
+      );
+    }
+  } else {
+    lines.push('Сегодня клиентов у вас не записано.');
   }
+  const earlier = debt.unpaidDays.filter((day) => day.date !== report.date);
+  if (earlier.length > 0) {
+    const sum = earlier.reduce((total, day) => total + day.amount, 0);
+    lines.push(`Не отдано за прошлые дни: ${rub(sum)} (${shortDates(earlier.map((day) => day.date))}).`);
+  }
+  if (debt.balance > 0) lines.push('', `Всего вы должны администратору: ${rub(debt.balance)}.`);
   return lines.join('\n');
 }
 
@@ -470,8 +660,11 @@ export async function sendDayReport(date: string, byUserId: number | null): Prom
   );
 
   await sendToPeople(adminMaxUsers(), adminReportText(report));
-  for (const item of report.masters) {
-    await sendToMaster(item.masterId, masterReportText(report, item));
+  // Каждому мастеру в личку: кто работал сегодня и кто ещё не отдал за прошлые дни.
+  for (const debt of allDebts()) {
+    const item = report.masters.find((master) => master.masterId === debt.masterId);
+    if (!item && debt.balance <= 0) continue;
+    await sendToMaster(debt.masterId, masterReportText(report, item, debt));
   }
   return report;
 }
@@ -545,10 +738,17 @@ async function morningDuty(): Promise<void> {
     `Доброе утро! Сегодня вы дежурный. Записывайте в кассу каждого клиента — вечером бот сам пришлёт итог.`,
   );
   if (maxToken()) {
+    const link = await miniAppLink('cash');
     await Promise.all(
       enabledRecipients('max')
         .filter((recipient) => recipient.kind === 'chat')
-        .map((recipient) => sendToMaxChat(recipient.target, `Сегодня дежурит <b>${name}</b>. Каждого клиента — в кассу.`)),
+        .map((recipient) =>
+          sendToMaxChat(
+            recipient.target,
+            `Доброе утро! Сегодня дежурный — <b>${name}</b>.\nЗаписывайте каждого клиента в кассу — кнопка ниже.`,
+            { buttons: link ? [{ label: 'Записать клиента', link }] : [] },
+          ),
+        ),
     );
   }
 }

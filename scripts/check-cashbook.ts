@@ -6,6 +6,9 @@
 import assert from 'node:assert/strict';
 import {
   addEntry,
+  cancelPayment,
+  confirmPayment,
+  masterDebt,
   dayView,
   deleteEntry,
   dutyFor,
@@ -86,6 +89,23 @@ async function main() {
   assert.ok(own.entries.every((entry) => entry.masterId === m2.id));
   assert.equal(own.report.masters.length, 1);
 
+  // Долги: пока смена идёт, сегодняшнее ещё не долг; прошлые дни копятся.
+  assert.equal(masterDebt(m1.id).balance, 0);
+  addEntry(adminRole, admin.id, { date: addDays(today, -2), masterId: m1.id, service: 'Фейд', price: 1000 });
+  addEntry(adminRole, admin.id, { date: addDays(today, -1), masterId: m1.id, service: 'Фейд', price: 500 });
+  // Процент запомнился в записях: 40% от 1000 и от 500.
+  assert.equal(masterDebt(m1.id).balance, 600);
+  assert.deepEqual(masterDebt(m1.id).unpaidDays.map((day) => day.amount), [400, 200]);
+  // Частичная оплата гасит самый старый день.
+  await confirmPayment(m1.id, 450, admin.id);
+  assert.deepEqual(masterDebt(m1.id).unpaidDays, [{ date: addDays(today, -1), amount: 150 }]);
+  await assert.rejects(confirmPayment(m1.id, 1000, admin.id), /должен только/);
+  const wrongPayment = masterDebt(m1.id).payments[0];
+  cancelPayment(wrongPayment.id);
+  assert.equal(masterDebt(m1.id).balance, 600);
+  await confirmPayment(m1.id, 600, admin.id);
+  assert.equal(masterDebt(m1.id).balance, 0);
+
   // Итог видно сразу, без закрытия дня. После рассылки дежурный уже не правит, админ — может.
   await sendDayReport(today, null);
   assert.ok(dayView(adminRole, today).reportSentAt);
@@ -93,9 +113,12 @@ async function main() {
   assert.throws(() => addEntry(dutyRole, duty.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 }), /уже отправлен/);
   await assert.rejects(sendDayReport(today, null), /уже отправлен/);
   addEntry(adminRole, admin.id, { date: today, masterId: m1.id, service: 'Фейд', price: 600 });
-  // Процент поменяли — администратор сразу видит пересчёт.
+  // После рассылки сегодняшнее стало долгом: 40% от 1601.
+  assert.equal(masterDebt(m1.id).balance, Math.floor(1601 * 0.4));
+  // Процент поменяли — уже записанные клиенты не пересчитываются, новые идут по новому.
   updateStaffMaster(m1.id, { percent: 50 });
-  assert.equal(dayView(adminRole, today).report.owed, Math.floor(1601 * 0.5) + 300);
+  addEntry(adminRole, admin.id, { date: today, masterId: m1.id, service: 'Кроп', price: 600 });
+  assert.equal(dayView(adminRole, today).report.owed, Math.floor(1601 * 0.4 + 600 * 0.5) + 300);
 
   // Очередь: после m1 сегодня завтра дежурит следующий по порядку.
   const order = activeMasters().map((m) => m.id);

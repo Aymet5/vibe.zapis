@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Percent, Trash2, Users, Wallet } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Clock, Percent, Trash2, Users, Wallet, X } from 'lucide-react';
 import { CATEGORIES, SERVICES, type CategoryId } from '../../shared/catalog';
 import type { PublicMaster } from '../../shared/types';
-import { api, type CashDay, type DutyDay, type StaffMaster, type StaffRole } from '../api';
+import { api, type CashDay, type DutyDay, type MasterDebt, type StaffMaster, type StaffRole } from '../api';
 import { Button, ErrorNote, Spinner, inputClass } from '../components/ui';
 import { addDays, formatDate, formatDateFull, formatPhone, plural, weekdayShort } from '../lib/format';
 import { haptic } from '../lib/maxApp';
@@ -13,10 +13,15 @@ import { haptic } from '../lib/maxApp';
  * рассылает, кто сколько должен.
  */
 
-type Section = 'cash' | 'duty' | 'masters';
+type Section = 'cash' | 'debts' | 'duty' | 'masters';
 
 function rub(amount: number): string {
   return `${amount.toLocaleString('ru-RU')} ₽`;
+}
+
+/** Суммы денег — зелёным, чтобы сразу бросались в глаза. */
+function Money({ amount, className = '' }: { amount: number; className?: string }) {
+  return <span className={`text-money whitespace-nowrap ${className}`}>{rub(amount)}</span>;
 }
 
 export function CashScreen({ role, today, masters }: { role: StaffRole; today: string; masters: PublicMaster[] }) {
@@ -24,12 +29,14 @@ export function CashScreen({ role, today, masters }: { role: StaffRole; today: s
 
   const sections: { id: Section; label: string }[] = [
     { id: 'cash', label: 'Касса' },
+    ...(role.isAdmin || role.masterId ? [{ id: 'debts' as const, label: 'Долги' }] : []),
     { id: 'duty', label: 'Дежурства' },
     ...(role.isAdmin ? [{ id: 'masters' as const, label: 'Проценты' }] : []),
   ];
 
   return (
     <div className="space-y-4">
+      {/* Четыре вкладки в одну строку на телефоне не помещаются крупным шрифтом — тогда две строки. */}
       <div className={`grid gap-1 rounded-2xl bg-badge p-1 ${sections.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {sections.map((item) => (
           <button
@@ -50,6 +57,7 @@ export function CashScreen({ role, today, masters }: { role: StaffRole; today: s
 
       <div key={section} className="max-step">
         {section === 'cash' && <CashDayScreen role={role} today={today} masters={masters} />}
+        {section === 'debts' && <DebtsScreen role={role} />}
         {section === 'duty' && <DutyScreen role={role} today={today} masters={masters} />}
         {section === 'masters' && <PercentScreen />}
       </div>
@@ -304,13 +312,19 @@ function Totals({ day, isAdmin }: { day: CashDay; isAdmin: boolean }) {
           <div key={item.masterId} className="px-4 py-3.5 space-y-1">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-lg font-bold">{item.masterName}</span>
-              <span className="text-lg font-black">{rub(item.revenue)}</span>
+              <Money amount={item.revenue} className="text-lg font-black" />
             </div>
             <p className="text-text-muted">
               {item.clients} {plural(item.clients, 'клиент', 'клиента', 'клиентов')}
-              {item.percent
-                ? ` · ${item.percent}% админу: ${rub(item.owed)} · мастеру: ${rub(item.earned)}`
-                : ' · не на процентах'}
+              {item.percent ? (
+                <>
+                  {' '}
+                  · {item.percent}% админу: <Money amount={item.owed} className="font-semibold" /> · мастеру:{' '}
+                  <Money amount={item.earned} className="font-semibold" />
+                </>
+              ) : (
+                ' · не на процентах'
+              )}
             </p>
           </div>
         ))}
@@ -318,10 +332,11 @@ function Totals({ day, isAdmin }: { day: CashDay; isAdmin: boolean }) {
           <div className="px-4 py-3.5 bg-orange-500/10">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-lg font-bold">Всего</span>
-              <span className="text-lg font-black">{rub(report.revenue)}</span>
+              <Money amount={report.revenue} className="text-lg font-black" />
             </div>
             <p className="font-semibold text-orange-500">
-              {report.clients} {plural(report.clients, 'клиент', 'клиента', 'клиентов')} · к сдаче {rub(report.owed)}
+              {report.clients} {plural(report.clients, 'клиент', 'клиента', 'клиентов')} · за сегодня к сдаче{' '}
+              <Money amount={report.owed} />
             </p>
           </div>
         )}
@@ -370,7 +385,7 @@ function EntryList({ day, onChange }: { day: CashDay; onChange: (day: CashDay) =
               </span>
               <span className="block text-sm text-text-muted truncate">записал(а) {entry.author}</span>
             </span>
-            <span className="font-bold shrink-0">{rub(entry.price)}</span>
+            <Money amount={entry.price} className="font-bold shrink-0" />
             {day.canWrite && (
               <button
                 type="button"
@@ -386,6 +401,176 @@ function EntryList({ day, onChange }: { day: CashDay; onChange: (day: CashDay) =
       </div>
       {armed !== null && <p className="text-sm text-red-400 text-center">Нажмите корзину ещё раз, чтобы удалить</p>}
     </section>
+  );
+}
+
+// ─── Долги мастеров ───
+
+function DebtsScreen({ role }: { role: StaffRole }) {
+  const [debts, setDebts] = useState<MasterDebt[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.staff
+      .debts()
+      .then((response) => setDebts(response.debts))
+      .catch((err: Error) => setError(err.message));
+  }, []);
+
+  if (!debts) {
+    return error ? (
+      <ErrorNote>{error}</ErrorNote>
+    ) : (
+      <div className="flex justify-center py-12 text-text-muted">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const total = debts.reduce((sum, debt) => sum + Math.max(debt.balance, 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-text-muted">
+        {role.isAdmin
+          ? 'Сколько мастера должны с учётом всех дней. Когда мастер отдал деньги — подтвердите, и долг уменьшится.'
+          : 'Сколько вы должны администратору. Долг уменьшается, когда администратор подтверждает, что получил деньги.'}
+      </p>
+      {role.isAdmin && (
+        <div className="rounded-3xl bg-surface px-4 py-3.5 flex items-baseline justify-between gap-3">
+          <span className="text-lg font-bold">Всего ждём</span>
+          <Money amount={total} className="text-2xl font-black" />
+        </div>
+      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {debts.map((debt) => (
+        <DebtCard key={debt.masterId} debt={debt} isAdmin={role.isAdmin} onChange={setDebts} />
+      ))}
+    </div>
+  );
+}
+
+function DebtCard({
+  debt,
+  isAdmin,
+  onChange,
+}: {
+  debt: MasterDebt;
+  isAdmin: boolean;
+  onChange: (debts: MasterDebt[]) => void;
+}) {
+  const [amount, setAmount] = useState(debt.balance > 0 ? String(debt.balance) : '');
+  const [armed, setArmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setAmount(debt.balance > 0 ? String(debt.balance) : '');
+    setArmed(false);
+  }, [debt.balance]);
+
+  const confirm = async () => {
+    if (!armed) {
+      haptic('tap');
+      setArmed(true);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      onChange((await api.staff.confirmPayment(debt.masterId, Number(amount))).debts);
+      haptic('success');
+    } catch (err) {
+      haptic('error');
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+      setArmed(false);
+    }
+  };
+
+  const cancel = async (id: number) => {
+    setError('');
+    try {
+      onChange((await api.staff.cancelPayment(id)).debts);
+      haptic('success');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <div className="rounded-3xl bg-surface p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-lg font-black">{debt.masterName}</p>
+        {debt.balance > 0 ? (
+          <Money amount={debt.balance} className="text-xl font-black" />
+        ) : (
+          <span className="flex items-center gap-1 font-semibold text-money">
+            <Check className="w-5 h-5" /> долгов нет
+          </span>
+        )}
+      </div>
+
+      {debt.unpaidDays.length > 0 && (
+        <div className="space-y-1">
+          {debt.unpaidDays.map((day) => (
+            <div key={day.date} className="flex justify-between gap-3 text-text-muted">
+              <span>{formatDateFull(day.date)}</span>
+              <Money amount={day.amount} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isAdmin && debt.balance > 0 && (
+        <div className="space-y-2 pt-1">
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={amount}
+              onChange={(event) => {
+                setArmed(false);
+                setAmount(event.target.value.replace(/\D/g, ''));
+              }}
+              className={inputClass}
+            />
+            <span className="self-center font-semibold text-text-muted">₽</span>
+          </div>
+          <Button onClick={() => void confirm()} loading={saving} disabled={!(Number(amount) > 0)} className="w-full py-3.5">
+            <Check className="w-5 h-5" />
+            {armed ? `Нажмите ещё раз: получил ${rub(Number(amount))}` : 'Деньги получил'}
+          </Button>
+        </div>
+      )}
+
+      {error && <ErrorNote>{error}</ErrorNote>}
+
+      {debt.payments.length > 0 && (
+        <div className="space-y-1 border-t border-border pt-3">
+          <p className="text-sm font-semibold text-text-muted">Получено</p>
+          {debt.payments.map((payment) => (
+            <div key={payment.id} className="flex items-center gap-2">
+              <span className="flex-1 text-text-muted">
+                {formatDate(payment.date)}, {payment.time}
+              </span>
+              <Money amount={payment.amount} className="font-semibold" />
+              {isAdmin && (
+                <button
+                  type="button"
+                  aria-label="Отменить отметку"
+                  onClick={() => void cancel(payment.id)}
+                  className="p-1.5 rounded-full text-text-muted"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

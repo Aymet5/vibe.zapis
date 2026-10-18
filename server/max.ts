@@ -213,13 +213,23 @@ export function verifyInitData(initData: string): MaxWebAppUser {
 export async function sendToMaxChat(
   chatId: string,
   html: string,
-  options: { replyTo?: string } = {},
+  options: { replyTo?: string; buttons?: MaxLinkButton[] } = {},
 ): Promise<boolean> {
   try {
     await maxRequest('POST', `/messages?chat_id=${encodeURIComponent(chatId)}`, {
       body: {
         text: html.slice(0, 4000),
         format: 'html',
+        attachments: options.buttons?.length
+          ? [
+              {
+                type: 'inline_keyboard',
+                payload: {
+                  buttons: options.buttons.map((button) => [{ type: 'link', text: button.label, url: button.link }]),
+                },
+              },
+            ]
+          : undefined,
         // Ответ «цитатой» на конкретное сообщение в чате.
         ...(options.replyTo ? { link: { type: 'reply', mid: options.replyTo } } : {}),
       },
