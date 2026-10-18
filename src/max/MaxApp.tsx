@@ -426,7 +426,7 @@ function BookScreen({
                   key={item.name}
                   title={item.name}
                   subtitle={formatDuration(item.duration)}
-                  trailing={<span className="font-bold text-orange-500">{formatPrice(item)}</span>}
+                  trailing={<span className="font-bold text-money">{formatPrice(item)}</span>}
                   onClick={() => {
                     setService(findService(category, item.name) ?? item);
                     if (master && !master.categories.includes(category)) setMaster(null);
@@ -654,7 +654,12 @@ function BookingsScreen({
             </div>
             <p className="text-text-muted">
               {booking.service} · {booking.masterName}
-              {booking.finalPrice !== null && ` · ${booking.finalPrice}р`}
+              {booking.finalPrice !== null && (
+                <>
+                  {' · '}
+                  <span className="font-semibold text-money">{booking.finalPrice}р</span>
+                </>
+              )}
             </p>
 
             {movingId === booking.id ? (

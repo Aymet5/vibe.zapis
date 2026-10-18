@@ -246,8 +246,12 @@ function EntryForm({
             .filter((item) => item.price !== null)
             .map((item) => (
               <Chip key={item.name} active={!custom && service === item.name} onClick={() => pick(item.name, item.price)}>
-                {item.name} · {item.from ? 'от ' : ''}
-                {item.price}
+                {item.name} ·{' '}
+                {/* На выбранной (оранжевой) кнопке цена белая — зелёный на оранжевом не читается. */}
+                <span className={!custom && service === item.name ? '' : 'text-money'}>
+                  {item.from ? 'от ' : ''}
+                  {item.price}
+                </span>
               </Chip>
             ))}
           <Chip
